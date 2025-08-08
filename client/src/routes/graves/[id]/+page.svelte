@@ -285,7 +285,7 @@ map.once('idle', async () => {
   // 🔹 Add vector sources
   map.addSource('subdivision-blocks-source', {
     type: 'vector',
-    url: 'mapbox://intellitech.cmdysziqy2z5w1ppbaq7avd4f-1cy1n'
+    url: 'mapbox://intellitech.cme0cjopc10cw1mn11nkghf53-1j2jx'
   });
 
   map.addSource('locator-blocks-source', {
