@@ -1,0 +1,77 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Entrance to F Path" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [120.9767, 14.4727],  
+          [120.9764, 14.4724],  
+          [120.9764, 14.4725],  
+          [120.9763, 14.4725],  
+          [120.9763, 14.4725],  
+          [120.9763, 14.4726],  
+          [120.9762, 14.4726]   
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Entrance" },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9767, 14.4727]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "A" },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9764, 14.4724]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "B" },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9764, 14.4725]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "C" },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9763, 14.4725]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "D" },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9763, 14.4725]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "E" },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9763, 14.4726]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "F" },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9762, 14.4726]
+      }
+    }
+  ]
+}

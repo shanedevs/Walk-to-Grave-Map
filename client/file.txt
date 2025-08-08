@@ -1,0 +1,1465 @@
+<script>
+  import { onMount } from 'svelte';
+  import mapboxgl from 'mapbox-gl';
+
+  // Svelte 5 runes
+  let matchName = $state('');
+  let mapContainer = $state();
+  let directionUpdateInterval = $state(null);
+  let map = $state();
+  let mapStyle = $state('mapbox://styles/mapbox/streets-v12');
+  let coordinates = $state({ lng: 120.9758, lat: 14.4716 });
+  let zoom = $state(2);
+  let userLocation = $state(null);
+  let userMarker = $state(null);
+  let userLocationWatchId = $state(null);
+  let isTracking = $state(false);
+  let isMapLoaded = $state(false);
+  let isLoading = $state(false);
+  let errorMessage = $state(null);
+  let successMessage = $state(null);
+  let properties = $state([]);
+  
+  // Property navigation state
+  let propertyFeatures = $state([]);
+  let selectedProperty = $state(null);
+  let selectedBlock = $state('');
+
+  // Navigation state
+  let isNavigating = $state(false);
+  let currentRoute = $state(null);
+  let externalRoute = $state(null);
+  let isInsideCemetery = $state(false);
+  let currentStep = $state('');
+  let distanceToDestination = $state(0);
+  let routeProgress = $state(0);
+  let progressPercentage = $state(0);
+  let directDistanceToDestination = $state(0);
+  let showExitPopup = $state(false);
+  let hasReachedDestination = $state(false);
+  let needsEntranceFirst = $state(false);
+  
+  // Main entrance coordinates (cemetery gate)
+  const MAIN_ENTRANCE = { lng: 120.9768, lat: 14.4727 };
+  let destinationMarker = $state(null);
+  let entranceMarker = $state(null);
+  let cemeteryPaths = $state([]);
+  
+  let matchProperty = $derived(() => 
+    matchName ? propertyFeatures.find((p) => p.name === matchName) : null
+  );
+  
+  // Search functionality for locator-blocks
+  let filteredProperties = $derived(() => {
+    if (!matchName || !properties) return [];
+    const searchTerm = matchName.toLowerCase().trim();
+    return properties.filter(property => 
+      property.name.toLowerCase().includes(searchTerm)
+    ).slice(0, 10); // Limit to 10 results
+  });
+
+  // Mapbox access token
+  mapboxgl.accessToken = 'pk.eyJ1IjoiaW50ZWxsaXRlY2giLCJhIjoiY21jZTZzMm1xMHNmczJqcHMxOWtmaTd4aiJ9.rKhf7nuky9mqxxFAAIJlrQ';
+  
+  const mapStyles = [
+    { value: 'mapbox://styles/mapbox/streets-v12', label: 'Mapbox Streets' },
+    { value: 'mapbox://styles/mapbox/satellite-v9', label: 'Mapbox Satellite' },
+    { value: 'mapbox://styles/mapbox/outdoors-v12', label: 'Mapbox Outdoors' },
+    { value: 'mapbox://styles/mapbox/light-v11', label: 'Mapbox Light' },
+    { value: 'mapbox://styles/mapbox/dark-v11', label: 'Mapbox Dark' },
+    { value: 'osm', label: 'OpenStreetMap' }
+  ];
+
+  onMount(async () => {
+    // Extract block name from URL path like /graves/Block-1-Private-14
+    const pathSegments = window.location.pathname.split('/');
+    if (pathSegments[1] === 'graves' && pathSegments[2]) {
+      selectedBlock = decodeURIComponent(pathSegments[2]);
+      matchName = selectedBlock;
+      console.log('URL-based block selection:', selectedBlock);
+    }
+
+    // Initialize map first
+    const initTimeout = setTimeout(() => {
+      initializeMap();
+    }, 100);
+
+    // Auto-start tracking
+    startTracking();
+
+    // Event listener for manual property selection
+    const handleSelectProperty = (e) => {
+      const propertyName = e?.detail;
+      const match = propertyFeatures.find(p => p.name === propertyName);
+      if (match) {
+        const { lng, lat } = extractLngLatFromGeometry(match.geometry);
+        selectedProperty = { ...match, lng, lat };
+        matchName = match.name;
+        startNavigationToProperty(selectedProperty);
+        showSuccess(`Selected property: ${propertyName}`);
+      } else {
+        showError('Property not found.');
+      }
+    };
+
+    window.addEventListener('selectProperty', handleSelectProperty);
+
+    return () => {
+      if (map) {
+        map.remove();
+        map = null;
+      }
+      clearTimeout(initTimeout);
+      stopNavigation();
+      if (userLocationWatchId) {
+        navigator.geolocation.clearWatch(userLocationWatchId);
+      }
+      window.removeEventListener('selectProperty', handleSelectProperty);
+    };
+  });
+
+  function extractLngLatFromGeometry(geometry) {
+    try {
+      // Handle different geometry types
+      if (geometry.type === 'Point') {
+        const [lng, lat] = geometry.coordinates;
+        return { lng, lat };
+      } else if (geometry.type === 'Polygon') {
+        const coords = geometry.coordinates[0][0];
+        const [lng, lat] = coords;
+        return { lng, lat };
+      } else if (geometry.type === 'MultiPolygon') {
+        const coords = geometry.coordinates[0][0][0];
+        const [lng, lat] = coords;
+        return { lng, lat };
+      }
+    } catch (err) {
+      console.error('Failed to extract coordinates from geometry:', err);
+    }
+    return { lng: null, lat: null };
+  }
+
+  function tryPreselectBlock() {
+    if (!selectedBlock || !properties || properties.length === 0) {
+      return false;
+    }
+    
+    const match = properties.find(p => p.name === selectedBlock);
+    if (match) {
+      const { lng, lat } = extractLngLatFromGeometry(match.geometry);
+      selectedProperty = {
+        ...match,
+        lng,
+        lat
+      };
+      matchName = match.name;
+      console.log('Block preselected:', match.name);
+      return true;
+    }
+    return false;
+  }
+
+  function initializeMap() {
+    if (!mapContainer) return;
+    
+    const style = mapStyle === 'osm'
+      ? {
+          version: 8,
+          sources: {
+            osm: {
+              type: 'raster',
+              tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'],
+              tileSize: 256,
+              attribution: '© OpenStreetMap contributors',
+              maxzoom: 19
+            }
+          },
+          layers: [
+            {
+              id: 'osm-tiles',
+              type: 'raster',
+              source: 'osm',
+              minzoom: 0,
+              maxzoom: 22
+            }
+          ]
+        }
+      : mapStyle;
+      
+    map = new mapboxgl.Map({
+      container: mapContainer,
+      style: style,
+      center: [120.9763, 14.4725],
+      zoom: 20,
+      attributionControl: true,
+      logoPosition: 'bottom-right'
+    });
+    
+    let userId = localStorage.getItem('userId');
+    if (!userId) {
+      userId = 'user-' + Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('userId', userId);
+    }
+    
+    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    
+    const geolocate = new mapboxgl.GeolocateControl({
+      positionOptions: { enableHighAccuracy: true },
+      trackUserLocation: true,
+      showUserLocation: true
+    });
+    map.addControl(geolocate);
+    
+    userMarker = new mapboxgl.Marker({ color: '#ef4444', scale: 1.2 })
+      .setLngLat([120.9763, 14.4725])
+      .addTo(map);
+
+    // Add main entrance marker
+    entranceMarker = new mapboxgl.Marker({ color: '#10b981', scale: 1.5 })
+      .setLngLat([MAIN_ENTRANCE.lng, MAIN_ENTRANCE.lat])
+      .addTo(map);
+
+    // All layers must be added only after the map loads
+    map.on('load', async () => {
+      isMapLoaded = true;
+      map.resize();
+      
+      // Add BOTH subdivision and locator block sources
+      map.addSource('subdivision-blocks-source', {
+        type: 'vector',
+        url: 'mapbox://intellitech.cmdmlm8n90bju1onvjg1lijbp-54whw'
+      });
+
+      map.addSource('locator-blocks-source', {
+        type: 'vector', 
+        url: 'mapbox://intellitech.cmdngha7ab8101mpcv9pk5vt2-831gg'
+      });
+      
+      // Add subdivision blocks layer (polygons) - LOWER opacity
+      map.addLayer({
+        id: 'subdivision-blocks',
+        type: 'fill',
+        source: 'subdivision-blocks-source',
+        'source-layer': 'subdivision-blocks',
+        paint: {
+          'fill-color': '#3b82f6',
+          'fill-opacity': 0.3
+        },
+        filter: ['==', '$type', 'Polygon']
+      });
+
+      // Add subdivision blocks outline
+      map.addLayer({
+        id: 'subdivision-blocks-outline',
+        type: 'line',
+        source: 'subdivision-blocks-source',
+        'source-layer': 'subdivision-blocks',
+        paint: {
+          'line-color': '#1d4ed8',
+          'line-width': 1,
+          'line-opacity': 0.5
+        },
+        filter: ['==', '$type', 'Polygon']
+      });
+
+      // Add locator blocks layer (points) - INVISIBLE but used for navigation
+      map.addLayer({
+        id: 'locator-blocks',
+        type: 'circle',
+        source: 'locator-blocks-source',
+        'source-layer': 'locator-blocks', 
+        paint: {
+          'circle-radius': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            15, 6,
+            20, 10,
+            22, 14
+          ],
+          'circle-color': '#ef4444',
+          'circle-stroke-width': 3,
+          'circle-stroke-color': 'transparent',
+          'circle-opacity': 0.0  // INVISIBLE - used only for navigation logic
+        }
+      });
+
+      // Add locator blocks labels - INVISIBLE
+      map.addLayer({
+        id: 'locator-blocks-labels',
+        type: 'symbol',
+        source: 'locator-blocks-source',
+        'source-layer': 'locator-blocks',
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-size': 12,
+          'text-offset': [0, 2],
+          'text-anchor': 'top'
+        },
+        paint: {
+          'text-color': '#ef4444',
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 2,
+          'text-opacity': 0.0  // INVISIBLE - used only for navigation logic
+        }
+      });
+
+      // Add tiny solid circles like Google Maps
+      map.addLayer({
+        id: 'block-markers',
+        type: 'circle',
+        source: 'locator-blocks-source',
+        'source-layer': 'locator-blocks',
+        paint: {
+          'circle-radius': 4, // Tiny solid circle
+          'circle-color': '#ef4444',
+          'circle-stroke-width': 1,
+          'circle-stroke-color': '#ffffff',
+          'circle-opacity': 1.0
+        }
+      });
+
+      // Add simple block labels (no child/adult/bone info)
+      map.addLayer({
+        id: 'block-labels',
+        type: 'symbol',
+        source: 'locator-blocks-source',
+        'source-layer': 'locator-blocks',
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-size': 11,
+          'text-offset': [0, 1.5],
+          'text-anchor': 'top',
+          'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold']
+        },
+        paint: {
+          'text-color': '#374151',
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 1
+        }
+      });
+
+      // Add cemetery paths - Enhanced for pathfinding
+      map.addLayer({
+        id: 'cemetery-paths',
+        type: 'line',
+        source: 'subdivision-blocks-source',
+        'source-layer': 'subdivision-blocks',
+        paint: {
+          'line-color': '#ef4444',
+          'line-width': 2,
+          'line-opacity': 0.6
+        },
+        filter: ['==', '$type', 'LineString']
+      });
+      
+      // Handle clicking on BLOCK MARKERS (for navigation)
+      map.on('click', 'block-markers', (e) => {
+        const feature = e.features?.[0];
+        const name = feature?.properties?.name;
+        if (!name) return;
+        
+        const property = {
+          id: feature.id,
+          name,
+          lng: e.lngLat.lng,
+          lat: e.lngLat.lat,
+          feature
+        };
+        
+        selectedProperty = property;
+        matchName = name;
+        
+        // Update URL when clicking on block
+        const path = `/graves/${encodeURIComponent(name)}`;
+        history.pushState(null, '', path);
+        
+        startNavigationToProperty(property);
+        showSuccess(`Selected block: ${name}`);
+      });
+
+      // Handle clicking on BLOCK LABELS (for navigation)
+      map.on('click', 'block-labels', (e) => {
+        const feature = e.features?.[0];
+        const name = feature?.properties?.name;
+        if (!name) return;
+        
+        const property = {
+          id: feature.id,
+          name,
+          lng: e.lngLat.lng,
+          lat: e.lngLat.lat,
+          feature
+        };
+        
+        selectedProperty = property;
+        matchName = name;
+        
+        // Update URL when clicking on block
+        const path = `/graves/${encodeURIComponent(name)}`;
+        history.pushState(null, '', path);
+        
+        startNavigationToProperty(property);
+        showSuccess(`Selected block: ${name}`);
+      });
+
+      // Change cursor on hover for block markers
+      map.on('mouseenter', 'block-markers', () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+
+      map.on('mouseleave', 'block-markers', () => {
+        map.getCanvas().style.cursor = '';
+      });
+
+      // Change cursor on hover for block labels
+      map.on('mouseenter', 'block-labels', () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+
+      map.on('mouseleave', 'block-labels', () => {
+        map.getCanvas().style.cursor = '';
+      });
+      
+      // Wait for tiles to load then try auto-navigation
+      map.once('idle', () => {
+        setTimeout(async () => {
+          await loadFeaturesFromMap();
+          await loadCemeteryPaths();
+          
+          // AUTO-NAVIGATION: Try to find and navigate to the block from URL
+          if (selectedBlock && properties.length > 0) {
+            const success = tryPreselectBlock();
+            if (success && selectedProperty && userLocation) {
+              console.log('Auto-navigating to:', selectedProperty.name);
+              await startNavigationToProperty(selectedProperty);
+              showSuccess(`Auto-navigating to ${selectedProperty.name}`);
+            } else if (success && selectedProperty && !userLocation) {
+              showSuccess(`Block ${selectedProperty.name} selected. Starting location tracking...`);
+              // Auto-start location tracking and retry navigation
+              setTimeout(async () => {
+                await startTracking();
+                // Wait a bit for location to be acquired, then auto-navigate
+                setTimeout(async () => {
+                  if (userLocation && selectedProperty) {
+                    console.log('Location acquired, auto-navigating to:', selectedProperty.name);
+                    await startNavigationToProperty(selectedProperty);
+                    showSuccess(`Auto-navigating to ${selectedProperty.name}`);
+                  }
+                }, 3000);
+              }, 500);
+            } else {
+              showError(`Block "${selectedBlock}" not found. Please check the block name.`);
+            }
+          }
+        }, 2000);
+      });
+
+      // Auto-start location tracking if URL has block parameter
+      if (selectedBlock) {
+        setTimeout(() => {
+          startTracking();
+        }, 1000);
+      }
+    });
+
+    // Mouse move handler
+    map.on('mousemove', (e) => {
+      coordinates = {
+        lng: Number(e.lngLat.lng.toFixed(4)),
+        lat: Number(e.lngLat.lat.toFixed(4))
+      };
+    });
+
+    map.on('zoom', () => {
+      zoom = Number(map.getZoom().toFixed(2));
+    });
+
+    map.on('error', (e) => {
+      console.error('Map error:', e.error);
+      showError('Map error: ' + e.error.message);
+    });
+  }
+
+  async function loadFeaturesFromMap() {
+    if (!map) return;
+    
+    // Query locator block features (points for navigation) - Only from locator-blocks
+    const locatorFeatures = map.queryRenderedFeatures({
+      layers: ['locator-blocks']
+    });
+
+    const processedProperties = [];
+    const propertyNames = new Set();
+
+    locatorFeatures.forEach(feature => {
+      const name = feature.properties?.name;
+      if (name && !propertyNames.has(name)) {
+        propertyNames.add(name);
+        const coordinates = feature.geometry.coordinates;
+        processedProperties.push({
+          id: feature.id || name,
+          name,
+          lng: coordinates[0],
+          lat: coordinates[1],
+          feature: feature
+        });
+      }
+    });
+
+    properties = processedProperties;
+    propertyFeatures = processedProperties;
+    console.log(`Loaded ${properties.length} locator blocks`);
+  }
+
+  async function loadCemeteryPaths() {
+    if (!map) return;
+    
+    // Query LineString features from subdivision-blocks for pathfinding
+    const pathFeatures = map.queryRenderedFeatures({
+      layers: ['cemetery-paths']
+    });
+
+    const processedPaths = [];
+    pathFeatures.forEach(feature => {
+      if (feature.geometry.type === 'LineString') {
+        processedPaths.push({
+          id: feature.id,
+          coordinates: feature.geometry.coordinates,
+          properties: feature.properties
+        });
+      }
+    });
+
+    cemeteryPaths = processedPaths;
+    console.log(`Loaded ${cemeteryPaths.length} cemetery paths for routing`);
+  }
+
+  async function startNavigationToProperty(property) {
+    if (!property) {
+      showError('Please select a property first');
+      return;
+    }
+
+    if (!userLocation) {
+      showError('Please enable location tracking to start navigation');
+      return;
+    }
+
+    const propertyName = property.name?.trim();
+    if (!propertyName) {
+      showError('Invalid property name.');
+      return;
+    }
+    
+    // Update URL 
+    const blockSegment = selectedBlock || propertyName;
+    const path = `/graves/${encodeURIComponent(blockSegment)}`;
+    history.pushState(null, '', path);
+    
+    // Update search input to show selected block
+    matchName = propertyName;
+
+    // Reset navigation state
+    stopNavigation();
+    isLoading = true;
+    isNavigating = true;
+    hasReachedDestination = false;
+
+    try {
+      // Remove old destination marker if any
+      if (destinationMarker) {
+        destinationMarker.remove();
+        destinationMarker = null;
+      }
+
+      // Place a new pink marker
+      destinationMarker = new mapboxgl.Marker({ color: '#f652a0' })
+        .setLngLat([property.lng, property.lat])
+        .addTo(map);
+
+      // Create multi-waypoint route: User -> Main Entrance -> Destination
+      const waypoints = [
+        [userLocation.lng, userLocation.lat], // Start
+        [MAIN_ENTRANCE.lng, MAIN_ENTRANCE.lat], // Main entrance
+        [property.lng, property.lat] // Final destination
+      ];
+
+      // Fetch route using cemetery paths and Mapbox directions
+      const route = await getEnhancedRoute(waypoints);
+
+      currentRoute = route;
+      displayRoute();
+      startNavigationUpdates();
+      showSuccess(`Navigation started to ${propertyName} via main entrance`);
+    } catch (error) {
+      console.error('Navigation error:', error);
+      showError('Failed to create route: ' + error.message);
+      stopNavigation();
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  async function getEnhancedRoute(waypoints) {
+    try {
+      // For internal cemetery navigation, use LineString paths from subdivision-blocks
+      const entranceToDestination = await createInternalRouteUsingPaths(waypoints[1], waypoints[2]);
+      
+      if (entranceToDestination && entranceToDestination.coordinates.length > 0) {
+        // Get external route to entrance first
+        const toEntranceUrl = `https://api.mapbox.com/directions/v5/mapbox/walking/${waypoints[0][0]},${waypoints[0][1]};${waypoints[1][0]},${waypoints[1][1]}?steps=true&geometries=geojson&access_token=${mapboxgl.accessToken}`;
+        const toEntranceResponse = await fetch(toEntranceUrl);
+        const toEntranceData = await toEntranceResponse.json();
+        
+        if (toEntranceData.routes && toEntranceData.routes.length > 0) {
+          const externalRoute = toEntranceData.routes[0];
+          
+          // Combine external route + internal path using cemetery LineStrings
+          const combinedCoordinates = [
+            ...externalRoute.geometry.coordinates,
+            ...entranceToDestination.coordinates
+          ];
+          
+          return {
+            coordinates: combinedCoordinates,
+            distance: externalRoute.distance + entranceToDestination.distance,
+            steps: [
+              ...externalRoute.legs[0].steps.map(step => ({
+                instruction: step.maneuver.instruction,
+                distance: step.distance
+              })),
+              {
+                instruction: 'Enter cemetery and follow internal path',
+                distance: entranceToDestination.distance
+              },
+              {
+                instruction: 'Arrive at destination block',
+                distance: 0
+              }
+            ]
+          };
+        }
+      }
+      
+      // Fallback to regular Mapbox routing if internal paths fail
+      const waypointString = waypoints.map(wp => `${wp[0]},${wp[1]}`).join(';');
+      const url = `https://api.mapbox.com/directions/v5/mapbox/walking/${waypointString}?steps=true&geometries=geojson&access_token=${mapboxgl.accessToken}`;
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (data.routes && data.routes.length > 0) {
+        const route = data.routes[0];
+        
+        return {
+          coordinates: route.geometry.coordinates,
+          distance: route.distance,
+          steps: route.legs[0].steps.map(step => ({
+            instruction: step.maneuver.instruction,
+            distance: step.distance
+          }))
+        };
+      }
+    } catch (error) {
+      console.error('Enhanced routing error:', error);
+    }
+    
+    throw new Error('No route found');
+  }
+
+  async function createInternalRouteUsingPaths(start, destination) {
+    if (!cemeteryPaths || cemeteryPaths.length === 0) {
+      console.warn('No cemetery paths available for internal routing');
+      return null;
+    }
+
+    try {
+      // Find the closest path to destination using LineString data from subdivision-blocks
+      let bestPath = null;
+      let minDistanceToDestination = Infinity;
+      
+      cemeteryPaths.forEach(path => {
+        const distanceToPath = findDistanceToLineString(destination, path.coordinates);
+        if (distanceToPath < minDistanceToDestination) {
+          minDistanceToDestination = distanceToPath;
+          bestPath = path;
+        }
+      });
+
+      if (!bestPath) {
+        console.warn('No suitable path found for destination');
+        return null;
+      }
+
+      // Find nearest point on the path to the start location
+      const startPointOnPath = findNearestPointOnLine(start, bestPath.coordinates);
+      
+      // Find nearest point on the path to the destination
+      const destPointOnPath = findNearestPointOnLine(destination, bestPath.coordinates);
+      
+      // Create route along the path from start to destination
+      const pathStartIndex = startPointOnPath.index;
+      const pathEndIndex = destPointOnPath.index;
+      
+      let routeCoordinates = [];
+      
+      // Add route from start to path
+      routeCoordinates.push(start);
+      routeCoordinates.push(startPointOnPath.point);
+      
+      // Add the path segment
+      if (pathStartIndex <= pathEndIndex) {
+        routeCoordinates.push(...bestPath.coordinates.slice(pathStartIndex, pathEndIndex + 1));
+      } else {
+        // Reverse direction on path
+        routeCoordinates.push(...bestPath.coordinates.slice(pathEndIndex, pathStartIndex + 1).reverse());
+      }
+      
+      // Add route from path to destination
+      routeCoordinates.push(destPointOnPath.point);
+      routeCoordinates.push(destination);
+      
+      const totalDistance = calculatePathDistance(routeCoordinates);
+      
+      return {
+        coordinates: routeCoordinates,
+        distance: totalDistance,
+        pathUsed: bestPath
+      };
+      
+    } catch (error) {
+      console.error('Internal routing error:', error);
+      return null;
+    }
+  }
+
+  function findDistanceToLineString(point, lineCoordinates) {
+    let minDistance = Infinity;
+    
+    for (let i = 0; i < lineCoordinates.length - 1; i++) {
+      const segmentDistance = nearestPointOnSegment(point, lineCoordinates[i], lineCoordinates[i + 1]);
+      if (segmentDistance.distance < minDistance) {
+        minDistance = segmentDistance.distance;
+      }
+    }
+    
+    return minDistance;
+  }
+
+  // Route path directions functionality preserved from original
+  function getCemeteryBoundary() {
+    return [
+      [120.975, 14.470],
+      [120.978, 14.470],
+      [120.978, 14.473],
+      [120.975, 14.473],
+      [120.975, 14.470]
+    ];
+  }
+
+  function pointInPolygon(point, polygon) {
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const xi = polygon[i][0], yi = polygon[i][1];
+      const xj = polygon[j][0], yj = polygon[j][1];
+      
+      const intersect = ((yi > point[1]) !== (yj > point[1]))
+        && (point[0] < (xj - xi) * (point[1] - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  function findNearestEntrance() {
+    return { 
+      lng: 120.9768, 
+      lat: 14.4727, 
+      name: "Main Entrance" 
+    };
+  }
+
+  function findNearestPointOnLine(targetPoint, lineCoordinates) {
+    let nearestPoint = null;
+    let minDistance = Infinity;
+    let nearestIndex = 0;
+
+    for (let i = 0; i < lineCoordinates.length; i++) {
+      const distance = calculateDistance(targetPoint, lineCoordinates[i]);
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestPoint = lineCoordinates[i];
+        nearestIndex = i;
+      }
+    }
+
+    for (let i = 0; i < lineCoordinates.length - 1; i++) {
+      const segmentNearest = nearestPointOnSegment(
+        targetPoint,
+        lineCoordinates[i],
+        lineCoordinates[i + 1]
+      );
+      
+      if (segmentNearest.distance < minDistance) {
+        minDistance = segmentNearest.distance;
+        nearestPoint = segmentNearest.point;
+        nearestIndex = i;
+      }
+    }
+
+    return {
+      point: nearestPoint,
+      distance: minDistance,
+      index: nearestIndex
+    };
+  }
+
+  function nearestPointOnSegment(point, segmentStart, segmentEnd) {
+    const A = point[0] - segmentStart[0];
+    const B = point[1] - segmentStart[1];
+    const C = segmentEnd[0] - segmentStart[0];
+    const D = segmentEnd[1] - segmentStart[1];
+
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
+    
+    if (lenSq === 0) {
+      return {
+        point: segmentStart,
+        distance: calculateDistance(point, segmentStart)
+      };
+    }
+
+    let param = dot / lenSq;
+    param = Math.max(0, Math.min(1, param));
+
+    const nearestPoint = [
+      segmentStart[0] + param * C,
+      segmentStart[1] + param * D
+    ];
+
+    return {
+      point: nearestPoint,
+      distance: calculateDistance(point, nearestPoint)
+    };
+  }
+
+  function displayRoute() {
+    if (!currentRoute) return;
+
+    if (map.getSource('route')) map.removeSource('route');
+    if (map.getLayer('route')) map.removeLayer('route');
+
+    map.addSource('route', {
+      type: 'geojson',
+      data: {
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'LineString',
+          coordinates: currentRoute.coordinates
+        }
+      }
+    });
+
+    map.addLayer({
+      id: 'route',
+      type: 'line',
+      source: 'route',
+      layout: {
+        'line-join': 'round',
+        'line-cap': 'round'
+      },
+      paint: {
+        'line-color': '#3b82f6',
+        'line-width': 6,
+        'line-opacity': 0.8
+      }
+    });
+
+    // Focused map view: fit to route bounds, not world map
+    const bounds = new mapboxgl.LngLatBounds();
+    currentRoute.coordinates.forEach(coord => bounds.extend(coord));
+    map.fitBounds(bounds, { padding: 100 });
+  }
+
+  function startNavigationUpdates() {
+    if (directionUpdateInterval) {
+      clearInterval(directionUpdateInterval);
+    }
+
+    directionUpdateInterval = setInterval(() => {
+      if (!isTracking || !userLocation || !currentRoute) return;
+
+      const { closestIndex, distance } = findClosestPointOnRoute(
+        [userLocation.lng, userLocation.lat],
+        currentRoute.coordinates
+      );
+
+      const destination = currentRoute.coordinates[currentRoute.coordinates.length - 1];
+      directDistanceToDestination = calculateDistance([userLocation.lng, userLocation.lat], destination);
+
+      const totalDistance = currentRoute.distance;
+      const traveledDistance = calculatePathDistance(currentRoute.coordinates.slice(0, closestIndex + 1));
+      progressPercentage = Math.min(100, Math.max(0, (traveledDistance / totalDistance) * 100));
+
+      if (!isInsideCemetery) {
+        const cemeteryBoundary = getCemeteryBoundary();
+        isInsideCemetery = pointInPolygon(
+          [userLocation.lng, userLocation.lat],
+          cemeteryBoundary
+        );
+
+        if (isInsideCemetery) {
+          showSuccess("Entered cemetery grounds - switching to internal navigation");
+        }
+      }
+
+      distanceToDestination = calculateRemainingDistance(closestIndex);
+      currentStep = getCurrentStep(closestIndex);
+
+      // Enhanced arrival detection - Check if arrived at destination (within 15 meters)
+      if (directDistanceToDestination < 15 && !hasReachedDestination) {
+        hasReachedDestination = true;
+        completeNavigation();
+      }
+    }, 1000);
+  }
+
+  function calculateRemainingDistance(closestIndex) {
+    let distance = 0;
+    const coords = currentRoute.coordinates;
+    for (let i = closestIndex; i < coords.length - 1; i++) {
+      distance += calculateDistance(coords[i], coords[i + 1]);
+    }
+    return distance;
+  }
+
+  function getCurrentStep(closestIndex) {
+    if (!currentRoute?.steps) return '';
+    
+    let accumulatedDistance = 0;
+    for (const step of currentRoute.steps) {
+      accumulatedDistance += step.distance;
+      if (accumulatedDistance >= closestIndex) {
+        return step.instruction;
+      }
+    }
+    return 'Continue to destination';
+  }
+
+  function completeNavigation() {
+    stopNavigation();
+    showExitPopup = true; // Show "Navigate to Exit" popup
+    showSuccess(`Arrived at ${selectedProperty?.name || 'destination'}! 🎯`);
+  }
+
+  async function getMapboxDirections(start, end) {
+    // Use walking profile to avoid "flying inside cemetery" and get more appropriate paths
+    const url = `https://api.mapbox.com/directions/v5/mapbox/walking/${start[0]},${start[1]};${end[0]},${end[1]}?steps=true&geometries=geojson&access_token=${mapboxgl.accessToken}`;
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.routes && data.routes.length > 0) {
+      return {
+        coordinates: data.routes[0].geometry.coordinates,
+        distance: data.routes[0].distance,
+        steps: data.routes[0].legs[0].steps.map(step => ({
+          instruction: step.maneuver.instruction,
+          distance: step.distance
+        }))
+      };
+    }
+    
+    throw new Error('No route found');
+  }
+
+  function findClosestPointOnRoute(userPoint, routeCoordinates) {
+    let closestIndex = 0;
+    let minDistance = Infinity;
+    
+    routeCoordinates.forEach((coord, index) => {
+      const distance = calculateDistance(userPoint, coord);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestIndex = index;
+      }
+    });
+    
+    return { closestIndex, distance: minDistance };
+  }
+
+  function calculateDistance(point1, point2) {
+    const R = 6371e3; // Earth's radius in meters
+    const φ1 = point1[1] * Math.PI / 180;
+    const φ2 = point2[1] * Math.PI / 180;
+    const Δφ = (point2[1] - point1[1]) * Math.PI / 180;
+    const Δλ = (point2[0] - point1[0]) * Math.PI / 180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c;
+  }
+
+  function calculateDistanceToPath(point, pathCoordinates) {
+    if (!window.turf) return Infinity;
+    
+    try {
+      const userPoint = turf.point(point);
+      const line = turf.lineString(pathCoordinates);
+      const nearest = turf.nearestPointOnLine(line, userPoint);
+      return nearest.properties.dist * 1000; 
+    } catch (error) {
+      console.error('Distance calculation error:', error);
+      return Infinity;
+    }
+  }
+
+  function calculatePathDistance(coordinates) {
+    let distance = 0;
+    for (let i = 0; i < coordinates.length - 1; i++) {
+      distance += calculateDistance(coordinates[i], coordinates[i + 1]);
+    }
+    return distance;
+  }
+
+  function createInternalSteps(coordinates) {
+    return coordinates.map((coord, index) => ({
+      instruction: index === 0 ? 'Start on cemetery path' : 
+                   index === coordinates.length - 1 ? 'Arrive at grave block' : 
+                   'Continue on path',
+      distance: index < coordinates.length - 1 ? 
+                calculateDistance(coord, coordinates[index + 1]) : 0
+    }));
+  }
+
+  function startTracking() {
+    if (!navigator.geolocation) {
+      showError('Geolocation is not supported by this browser');
+      return;
+    }
+
+    isTracking = true;
+    userLocationWatchId = navigator.geolocation.watchPosition(
+      (position) => {
+        userLocation = {
+          lng: position.coords.longitude,
+          lat: position.coords.latitude,
+          accuracy: position.coords.accuracy
+        };
+        
+        if (userMarker) {
+          userMarker.setLngLat([userLocation.lng, userLocation.lat]);
+        }
+
+        // Update distance if navigating
+        if (isNavigating && selectedProperty) {
+          distanceToDestination = calculateDistance(
+            [userLocation.lng, userLocation.lat],
+            [selectedProperty.lng, selectedProperty.lat]
+          );
+        }
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        showError('Location tracking failed');
+        isTracking = false;
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+    );
+  }
+
+  function toggleTracking() {
+    if (isTracking) {
+      if (userLocationWatchId) {
+        navigator.geolocation.clearWatch(userLocationWatchId);
+        userLocationWatchId = null;
+      }
+      isTracking = false;
+      userLocation = null;
+      showSuccess('Location tracking stopped');
+    } else {
+      startTracking();
+      showSuccess('Location tracking started');
+    }
+  }
+
+  function stopNavigation() {
+    isNavigating = false;
+    hasReachedDestination = false;
+    
+    // Clear the navigation interval
+    if (directionUpdateInterval) {
+      clearInterval(directionUpdateInterval);
+      directionUpdateInterval = null;
+    }
+    
+    // Remove route display
+    if (map && map.getSource('route')) {
+      map.removeLayer('route');
+      map.removeSource('route');
+    }
+    
+    // Reset cemetery paths visibility
+    if (map && map.getLayer('cemetery-paths')) {
+      map.setPaintProperty('cemetery-paths', 'line-opacity', 0.6);
+      map.setFilter('cemetery-paths', null); // Remove filter to show all paths again
+    }
+    
+    // Remove destination marker
+    if (destinationMarker) {
+      destinationMarker.remove();
+      destinationMarker = null;
+    }
+    
+    // Clear route data
+    currentRoute = null;
+    selectedLineString = null;
+    externalRoute = null;
+    currentStep = '';
+    distanceToDestination = 0;
+  }
+
+  function navigateToExit() {
+    showExitPopup = false;
+    const entrance = findNearestEntrance();
+    
+    if (userLocation) {
+      // Start navigation to cemetery exit
+      startNavigationToExitOnly({
+        name: "Cemetery Exit",
+        lng: entrance.lng,
+        lat: entrance.lat
+      });
+      showSuccess("Navigating to cemetery exit");
+    } else {
+      showError("Location tracking required for exit navigation");
+    }
+  }
+
+  async function startNavigationToExitOnly(exitProperty) {
+    // Reset navigation state
+    stopNavigation();
+    isLoading = true;
+    isNavigating = true;
+    hasReachedDestination = false;
+
+    try {
+      // Remove old destination marker if any
+      if (destinationMarker) {
+        destinationMarker.remove();
+        destinationMarker = null;
+      }
+
+      // Place a new green marker for exit
+      destinationMarker = new mapboxgl.Marker({ color: '#10b981' })
+        .setLngLat([exitProperty.lng, exitProperty.lat])
+        .addTo(map);
+
+      // Direct route to exit
+      const route = await getMapboxDirections(
+        [userLocation.lng, userLocation.lat],
+        [exitProperty.lng, exitProperty.lat]
+      );
+
+      currentRoute = route;
+      displayRoute();
+      startNavigationUpdates();
+      showSuccess(`Navigation started to ${exitProperty.name}`);
+    } catch (error) {
+      console.error('Exit navigation error:', error);
+      showError('Failed to create exit route: ' + error.message);
+      stopNavigation();
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  function dismissExitPopup() {
+    showExitPopup = false;
+  }
+
+  function showSuccess(message) {
+    successMessage = message;
+    console.log('Success:', message);
+    setTimeout(() => {
+      if (successMessage === message) {
+        successMessage = null;
+      }
+    }, 3000);
+  }
+
+  function showError(message) {
+    errorMessage = message;
+    console.error('Error:', message);
+    setTimeout(() => {
+      if (errorMessage === message) {
+        errorMessage = null;
+      }
+    }, 5000);
+  }
+
+  function handleSearchInput(e) {
+    const val = e.target.value.trim();
+    matchName = val;
+    
+    // Auto-select if exact match found in locator-blocks
+    const exactMatch = properties.find(p => 
+      p.name.toLowerCase() === val.toLowerCase()
+    );
+    
+    if (exactMatch) {
+      selectedProperty = exactMatch;
+      // Update URL when exact match found
+      const path = `/graves/${encodeURIComponent(exactMatch.name)}`;
+      history.pushState(null, '', path);
+    }
+  }
+
+  function handleSearchSelect(propertyName) {
+    const property = properties.find(p => p.name === propertyName);
+    if (property) {
+      selectedProperty = property;
+      matchName = propertyName;
+      
+      // Update URL when property selected from dropdown
+      const path = `/graves/${encodeURIComponent(propertyName)}`;
+      history.pushState(null, '', path);
+      
+      // Auto-start navigation if location is available
+      if (userLocation) {
+        startNavigationToProperty(property);
+      }
+    }
+  }
+
+
+</script>
+
+<svelte:head>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+</svelte:head>
+
+<main class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+  <div class="max-w-7xl mx-auto">
+
+    <!-- Header -->
+    <header class="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-t-xl p-6 shadow-lg text-center">
+      <h1 class="text-3xl font-bold">Walk To Grave</h1>
+      <p class="mt-2 opacity-90">Navigate to grave blocks with real-time location</p>
+    </header>
+
+    <!-- Status Messages -->
+    {#if errorMessage}
+      <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 my-4" role="alert">
+        <p class="text-sm">{errorMessage}</p>
+      </div>
+    {/if}
+
+    {#if successMessage}
+      <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 my-4" role="alert">
+        <p class="text-sm">{successMessage}</p>
+      </div>
+    {/if}
+
+    <!-- Exit Navigation Popup -->
+    {#if showExitPopup}
+      <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg p-6 max-w-sm w-full shadow-xl">
+          <div class="text-center">
+            <div class="text-4xl mb-4">🎯</div>
+            <h3 class="text-lg font-bold text-gray-900 mb-2">Destination Reached!</h3>
+            <p class="text-gray-600 mb-6">You have arrived at {selectedProperty?.name || 'your destination'}. Would you like to navigate to the cemetery exit?</p>
+            
+            <div class="flex gap-3">
+              <button 
+                onclick={dismissExitPopup}
+                class="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+              >
+                Stay Here
+              </button>
+              <button 
+                onclick={navigateToExit}
+                class="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Exit Cemetery
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    <!-- Controls Section -->
+    <section class="bg-white p-6 border-x border-gray-200 shadow-sm grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+      <!-- Map Style -->
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Map Style</label>
+        <select bind:value={mapStyle} class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+          {#each mapStyles as style}
+            <option value={style.value}>{style.label}</option>
+          {/each}
+        </select>
+      </div>
+
+      <!-- Grave Block Search -->
+      <div class="relative">
+        <label class="block text-sm font-semibold text-gray-700 mb-1">
+          🔍 Looking for:
+          <span class="ml-1 font-normal text-gray-600">
+            {matchName || selectedProperty?.name || 'No block selected'}
+          </span>
+        </label>
+
+        <label for="search" class="block text-sm font-semibold text-gray-700 mb-2 mt-4">
+          Search Grave Block
+        </label>
+        <input
+          id="search"
+          type="text"
+          bind:value={matchName}
+          placeholder="Enter block name (e.g., Block-1-Private-14)"
+          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          oninput={handleSearchInput}
+        />
+        
+        <!-- Search Dropdown -->
+        {#if filteredProperties.length > 0 && matchName}
+          <div class="absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
+            {#each filteredProperties as property}
+              <button
+                type="button"
+                class="w-full px-3 py-2 text-left hover:bg-blue-50 border-b last:border-b-0"
+                onclick={() => handleSearchSelect(property.name)}
+              >
+                <div class="font-medium text-gray-900">{property.name}</div>
+                <div class="text-xs text-gray-500">
+                  Coordinates: {property.lng?.toFixed(6)}, {property.lat?.toFixed(6)}
+                </div>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      <!-- Navigation Controls -->
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Navigation</label>
+        <div class="space-y-2">
+          <button
+            onclick={() => selectedProperty && startNavigationToProperty(selectedProperty)}
+            disabled={!selectedProperty || isLoading}
+            class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          >
+            {isLoading ? 'Loading...' : 'Navigate to Block'}
+          </button>
+          
+          <button
+            onclick={stopNavigation}
+            disabled={!isNavigating}
+            class="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          >
+            Stop Navigation
+          </button>
+        </div>
+      </div>
+
+      <!-- Location Tracking -->
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Location</label>
+        <div class="space-y-2">
+          <button
+            onclick={toggleTracking}
+            class="w-full px-4 py-2 {isTracking ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} text-white rounded-lg transition-colors"
+          >
+            {isTracking ? 'Stop Tracking' : 'Start Tracking'}
+          </button>
+          
+          {#if userLocation}
+            <div class="text-xs text-gray-600">
+              <div>Lat: {userLocation.lat.toFixed(6)}</div>
+              <div>Lng: {userLocation.lng.toFixed(6)}</div>
+              <div>Accuracy: ±{userLocation.accuracy}m</div>
+            </div>
+          {/if}
+        </div>
+      </div>
+    </section>
+
+    <!-- Navigation Status -->
+    {#if isNavigating}
+      <section class="bg-blue-50 p-4 border-x border-gray-200">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          <div>
+            <span class="font-semibold text-blue-800">Distance:</span>
+            <span class="text-blue-600">{Math.round(distanceToDestination)}m</span>
+          </div>
+          <div>
+            <span class="font-semibold text-blue-800">Progress:</span>
+            <span class="text-blue-600">{Math.round(progressPercentage)}%</span>
+          </div>
+          <div>
+            <span class="font-semibold text-blue-800">Status:</span>
+            <span class="text-blue-600">{isInsideCemetery ? 'Inside Cemetery' : 'Approaching'}</span>
+          </div>
+        </div>
+        
+        {#if currentStep}
+          <div class="mt-3 p-3 bg-white rounded border-l-4 border-blue-500">
+            <div class="font-semibold text-blue-800 text-sm">Next Instruction:</div>
+            <div class="text-blue-600">{currentStep}</div>
+          </div>
+        {/if}
+      </section>
+    {/if}
+
+    <!-- Map Container -->
+    <div class="bg-white rounded-b-xl shadow-lg overflow-hidden">
+      <div class="relative">
+        <div bind:this={mapContainer} class="w-full h-[600px]"></div>
+        
+        <!-- Map Info Overlay -->
+        <div class="absolute bottom-4 left-4 bg-white bg-opacity-90 rounded-lg p-3 text-xs">
+          <div><strong>Coordinates:</strong> {coordinates.lng}, {coordinates.lat}</div>
+          <div><strong>Zoom:</strong> {zoom}</div>
+          {#if selectedProperty}
+            <div><strong>Selected:</strong> {selectedProperty.name}</div>
+          {/if}
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+
+<style>
+  @import 'https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css';
+
+  :global(.mapboxgl-popup-content) {
+    border-radius: 0.75rem;
+    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 10px 10px -5px rgb(0 0 0 / 0.04);
+    padding: 0;
+    max-width: 300px;
+  }
+
+  :global(.mapboxgl-popup-close-button) {
+    color: rgb(107 114 128);
+    font-size: 18px;
+    padding: 8px;
+  }
+
+  :global(.mapboxgl-popup-close-button:hover) {
+    color: rgb(55 65 81);
+    background-color: rgb(243 244 246);
+  }
+
+  :global(.mapboxgl-popup-tip) {
+    border-top-color: white;
+  }
+</style>
