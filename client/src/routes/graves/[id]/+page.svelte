@@ -1695,26 +1695,31 @@ function handleSearchInput(event) {
 <style>
   @import 'https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css';
 
-  :global(.mapboxgl-popup-content) {
-    border-radius: 0.75rem;
-    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 10px 10px -5px rgb(0 0 0 / 0.04);
+  /* Make map fill the viewport and remove page chrome */
+  :global(html), :global(body), :global(#svelte) {
+    height: 100%;
+    margin: 0;
     padding: 0;
-    max-width: 300px;
+    background: transparent;
   }
 
-  :global(.mapboxgl-popup-close-button) {
-    color: rgb(107 114 128);
-    font-size: 18px;
-    padding: 8px;
+  .map-fullscreen {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100vh;
   }
 
-  :global(.mapboxgl-popup-close-button:hover) {
-    color: rgb(55 65 81);
-    background-color: rgb(243 244 246);
-  }
-
-  :global(.mapboxgl-popup-tip) {
-    border-top-color: white;
+  /* Hide Mapbox UI controls if added by Mapbox */
+  :global(.mapboxgl-ctrl), 
+  :global(.mapboxgl-ctrl-group),
+  :global(.mapboxgl-ctrl-logo),
+  :global(.mapboxgl-ctrl-attrib),
+  :global(.mapboxgl-ctrl-geolocate) {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    opacity: 0 !important;
   }
 
    @keyframes slide-in-from-top {
