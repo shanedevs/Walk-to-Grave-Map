@@ -1613,7 +1613,7 @@ function handleSearchInput(event) {
 
     <!-- Map Display -->
     <section class="relative bg-white border-x border-gray-200 my-6">
-      <div bind:this={mapContainer} class="w-full h-[500px] lg:h-[600px]"></div>
+      <div bind:this={mapContainer} class="map-fullscreen"></div>
 
       {#if !map}
         <div class="absolute inset-0 bg-gray-100 flex items-center justify-center">
