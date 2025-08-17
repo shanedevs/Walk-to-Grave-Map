@@ -464,6 +464,42 @@ async function loadLineStringFeatures() {
       }
     });
 
+    function tryPreselectBlock() {
+  if (!selectedBlock) return false;
+
+  // 1) Prefer properties array (populated by loadFeaturesFromMap)
+  if (properties && properties.length) {
+    const matched = properties.find(p => String(p.name).toLowerCase() === String(selectedBlock).toLowerCase());
+    if (matched) {
+      selectedProperty = matched;
+      matchName = matched.name;
+      return true;
+    }
+  }
+
+  // 2) Fallback: query rendered features from the locator layer
+  try {
+    const features = map ? map.queryRenderedFeatures({ layers: ['locator-blocks', 'block-markers'] }) : [];
+    const matchedFeature = features.find(f => f.properties?.name && f.properties.name.toLowerCase() === String(selectedBlock).toLowerCase());
+    if (matchedFeature) {
+      const coords = matchedFeature.geometry.coordinates || [matchedFeature.center?.lng, matchedFeature.center?.lat];
+      const property = {
+        id: matchedFeature.id || matchedFeature.properties?.id || matchedFeature.properties?.name,
+        name: matchedFeature.properties?.name,
+        lng: coords[0],
+        lat: coords[1],
+        feature: matchedFeature
+      };
+      selectedProperty = property;
+      matchName = property.name;
+      return true;
+    }
+  } catch (err) {
+    console.warn('tryPreselectBlock fallback query failed:', err);
+  }
+
+  return false;
+}
   // 🔹 After all layers are ready, try auto-navigation from URL
 map.once('idle', () => {
     // attemptAutoNavigate will load features and auto-navigate if selectedBlock exists
