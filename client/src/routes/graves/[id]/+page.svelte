@@ -465,34 +465,64 @@ async function loadLineStringFeatures() {
     });
 
   // 🔹 After all layers are ready, try auto-navigation from URL
-  map.once('idle', () => {
-    setTimeout(async () => {
+map.once('idle', () => {
+    // attemptAutoNavigate will load features and auto-navigate if selectedBlock exists
+    attemptAutoNavigate();
+  });
+
+  // ...existing code...
+
+  // Helper: robust auto-navigation sequence
+  async function attemptAutoNavigate() {
+    try {
+      // Small delay to ensure map internals are stable
+      await new Promise(r => setTimeout(r, 500));
+
+      // Ensure we have features available
       await loadFeaturesFromMap();
 
-      if (selectedBlock && properties.length > 0) {
-        const success = tryPreselectBlock();
+      if (!selectedBlock) return;
+      if (!properties || properties.length === 0) {
+        // try again once after a short delay
+        await new Promise(r => setTimeout(r, 1000));
+        await loadFeaturesFromMap();
+      }
 
-        if (success && selectedProperty && userLocation) {
-          console.log('Auto-navigating to:', selectedProperty.name);
+      const success = tryPreselectBlock();
+      if (!success) {
+        console.warn('Auto-preselect failed for block:', selectedBlock);
+        return;
+      }
+
+      // If we already have a location, start navigation immediately
+      if (userLocation && selectedProperty) {
+        console.log('Auto-navigating immediately to:', selectedProperty.name);
+        await startNavigationToProperty(selectedProperty);
+        showSuccess(`Auto-navigating to ${selectedProperty.name}`);
+        return;
+      }
+
+      // Otherwise, request location and wait for it to appear
+      showSuccess(`Block ${selectedProperty?.name} selected. Requesting location permission...`);
+      startTracking(); // prompts user for permission and begins watchPosition
+
+      // Wait for userLocation up to 30s
+      const start = Date.now();
+      const poll = setInterval(async () => {
+        if (userLocation && selectedProperty) {
+          clearInterval(poll);
+          console.log('Location acquired, auto-navigating to:', selectedProperty.name);
           await startNavigationToProperty(selectedProperty);
           showSuccess(`Auto-navigating to ${selectedProperty.name}`);
-        } else if (success && selectedProperty && !userLocation) {
-          showSuccess(`Block ${selectedProperty.name} selected. Starting location tracking...`);
-          setTimeout(async () => {
-            await startTracking();
-            setTimeout(async () => {
-              if (userLocation && selectedProperty) {
-                console.log('Location acquired, auto-navigating to:', selectedProperty.name);
-                await startNavigationToProperty(selectedProperty);
-                showSuccess(`Auto-navigating to ${selectedProperty.name}`);
-              }
-            }, 3000);
-          }, 500);
-        };
-        
-      }
-    }, 2000);
-  });
+        } else if (Date.now() - start > 30000) {
+          clearInterval(poll);
+          showError('Unable to obtain location within timeout. Please enable location and try again.');
+        }
+      }, 1000);
+    } catch (err) {
+      console.error('attemptAutoNavigate error:', err);
+    }
+  }
 
   // 🔹 Auto-start tracking if block is present in URL
   if (selectedBlock) {
