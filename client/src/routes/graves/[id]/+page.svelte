@@ -285,7 +285,7 @@ map.once('idle', async () => {
   // 🔹 Add vector sources
   map.addSource('subdivision-blocks-source', {
     type: 'vector',
-    url: 'mapbox://intellitech.cme0cjopc10cw1mn11nkghf53-1j2jx'
+    url: 'mapbox://intellitech.cmdysziqy2z5w1ppbaq7avd4f-1cy1n'
   });
 
   map.addSource('locator-blocks-source', {
@@ -607,22 +607,32 @@ lineFeatures.forEach(feature => {
 
 let destinationMarker = null;
 
-function forceRouteThroughGate(routeCoordinates, mainGateCoord) {
+function forceRouteThroughGate(routeCoordinates, mainGateCoord, userIsInside) {
+  // 🚫 Don't touch internal-only routes
+  if (userIsInside) {
+    return routeCoordinates;
+  }
+
   const startCoord = routeCoordinates[0];
-  const endCoord = routeCoordinates[routeCoordinates.length - 1];
+  const endCoord   = routeCoordinates[routeCoordinates.length - 1];
 
-  const distanceToGateFromStart = calculateDistance(startCoord, mainGateCoord);
-  const distanceToGateFromEnd = calculateDistance(endCoord, mainGateCoord);
+  // How far route starts from the gate
+  const startToGate = calculateDistance(startCoord, mainGateCoord);
+  // How far route ends from the gate
+  const endToGate   = calculateDistance(endCoord,   mainGateCoord);
 
-  // If route doesn't already start at the gate and gate is closer to start, prepend it
-  if (distanceToGateFromStart > 10 && distanceToGateFromStart < distanceToGateFromEnd) {
+  // Only prepend if the route starts NEAR the gate (within 30m)
+  // and the gate isn't already the start, and route ends farther away from it
+  if (
+    startToGate < 30 &&
+    startToGate < endToGate &&
+    !(startCoord[0] === mainGateCoord[0] && startCoord[1] === mainGateCoord[1])
+  ) {
     return [mainGateCoord, ...routeCoordinates];
   }
 
-  // If route ends at the gate (which may be the case), no need to add again
   return routeCoordinates;
 }
-
 
 function findNearestPointOnLine(targetPoint, lineCoordinates) {
   let nearestPoint = null;
@@ -693,6 +703,7 @@ function handleSearchButtonClick(name) {
 
   navigateToProperty(property);
 }
+
 async function startNavigationToProperty(property) {
   if (!property || !userLocation) {
     showError('Please enable location tracking and select a property.');
@@ -703,137 +714,100 @@ async function startNavigationToProperty(property) {
   isLoading = true;
   isNavigating = true;
 
+  function mergeRouteLegs(existing, incoming) {
+    if (!incoming?.length) return existing;
+    if (!existing.length) return [...incoming];
+    const last = existing[existing.length - 1];
+    const firstNew = incoming[0];
+    if (last[0] !== firstNew[0] || last[1] !== firstNew[1]) {
+      existing.push(firstNew);
+    }
+    return existing.concat(incoming.slice(1));
+  }
+
   try {
     const userCoords = [userLocation.lng, userLocation.lat];
     const targetCoords = [property.lng, property.lat];
-    const entrance = findNearestEntrance();
-    const entranceCoords = [entrance.lng, entrance.lat];
-
-    const referencePoint = { lat: 14.4725, lng: 120.9762 }; // Updated Point F
-    const isSouthAndWest = property.lat < referencePoint.lat && property.lng < referencePoint.lng;
 
     const isInside = pointInPolygon(userCoords, getCemeteryBoundary());
-    const isNearTarget = haversineDistance(userCoords, targetCoords) < 50;
+    const isTargetInside = pointInPolygon(targetCoords, getCemeteryBoundary());
 
     let routeCoords = [];
     let navigationSteps = [];
     let totalDistance = 0;
 
-    // Set destination marker
     if (!destinationMarker) {
       destinationMarker = new mapboxgl.Marker({ color: '#1d4ed8', scale: 1.2 })
-        .setLngLat(targetCoords)
-        .addTo(map);
+        .setLngLat(targetCoords).addTo(map);
     } else {
       destinationMarker.setLngLat(targetCoords);
     }
 
-if (isInside) {
-  await navigateUsingInternalPaths(property);
-} else {
-  const routeToEntrance = await getMapboxDirections(userCoords, entranceCoords);
-  if (!routeToEntrance?.coordinates?.length) {
-    showError('Failed to get route to entrance.');
-    return;
-  }
-
-  const distToTarget = haversineDistance(userCoords, targetCoords);
-  const distAfterEntrance = haversineDistance(entranceCoords, targetCoords);
-
-  if (distAfterEntrance >= distToTarget) {
-    showError('Routing to entrance moves away from destination.');
-    return;
-  }
-
-  routeCoords.push(...routeToEntrance.coordinates);
-  navigationSteps.push(...routeToEntrance.steps);
-  totalDistance += routeToEntrance.distance;
-
-  // ✅ Skip middle points entirely if target is too deep southwest
-  const isTargetDeepSouthwest = targetCoords[1] < 14.4724 && targetCoords[0] < 120.9761;
-
-  // ✅ Proceed with middle route logic only if valid
-  if (isSouthAndWest && !isNearTarget && !isTargetDeepSouthwest) {
-    const { bestFirst, bestSecond } = await getBestMiddleRoute(property, entranceCoords);
-    let currentPoint = entrance;
-
-    let shouldSkipMiddle = false;
-
-    if (bestFirst) {
-      const distFirstToTarget = haversineDistance([bestFirst.lng, bestFirst.lat], targetCoords);
-      const entranceToTarget = haversineDistance(entranceCoords, targetCoords);
-
-      const isBacktracking =
-        bestFirst.lat > entranceCoords.lat || // Going north (bad)
-        bestFirst.lng > entranceCoords.lng;  // Going east (bad)
-
-      if (distFirstToTarget >= entranceToTarget || isBacktracking) {
-        shouldSkipMiddle = true;
+    // CASE 1: Both inside => pure internal navigation
+    if (isInside && isTargetInside) {
+      await navigateUsingInternalPaths(property, { lng: userCoords[0], lat: userCoords[1] });
+      if (!selectedLineString?.coordinates?.length) {
+        showError('No internal route found.');
+        stopNavigation();
+        return;
+      }
+      routeCoords = mergeRouteLegs(routeCoords, selectedLineString.coordinates);
+      totalDistance += calculatePathDistance(selectedLineString.coordinates);
+      navigationSteps.push(...createInternalSteps(selectedLineString.coordinates));
+    }
+    // CASE 2: Outside => Outside => use Mapbox direct route (skip “force exit”)
+    else if (!isInside && !isTargetInside) {
+      const outsideRoute = await getMapboxDirections(userCoords, targetCoords);
+      if (outsideRoute?.coordinates?.length) {
+        routeCoords = mergeRouteLegs(routeCoords, outsideRoute.coordinates);
+        totalDistance += outsideRoute.distance;
+        navigationSteps.push(...outsideRoute.steps);
       }
     }
+    // CASE 3: Inside => Outside => go to cemetery exit first
+    else if (isInside && !isTargetInside) {
+      const exit = findNearestEntrance();
+      await navigateUsingInternalPaths(exit, { lng: userCoords[0], lat: userCoords[1] });
+      if (!selectedLineString?.coordinates?.length) {
+        showError('No internal route found to exit.');
+        stopNavigation();
+        return;
+      }
+      routeCoords = mergeRouteLegs(routeCoords, selectedLineString.coordinates);
+      totalDistance += calculatePathDistance(selectedLineString.coordinates);
+      navigationSteps.push(...createInternalSteps(selectedLineString.coordinates));
 
-    if (!shouldSkipMiddle && bestSecond) {
-      const distSecondToTarget = haversineDistance([bestSecond.lng, bestSecond.lat], targetCoords);
-
-      const isSecondBacktracking =
-        bestSecond.lat > currentPoint.lat ||  // Going north (bad)
-        bestSecond.lng > currentPoint.lng;    // Going east (bad)
-
-      if (distSecondToTarget >= distAfterEntrance || isSecondBacktracking) {
-        shouldSkipMiddle = true;
+      const exitCoords = [exit.lng, exit.lat];
+      const outside = await getMapboxDirections(exitCoords, targetCoords);
+      if (outside?.coordinates?.length) {
+        routeCoords = mergeRouteLegs(routeCoords, outside.coordinates);
+        totalDistance += outside.distance;
+        navigationSteps.push(...outside.steps);
       }
     }
-
-    if (!shouldSkipMiddle) {
-      if (bestFirst) {
-        const toFirst = await getMapboxDirections(entranceCoords, [bestFirst.lng, bestFirst.lat]);
-        if (toFirst?.coordinates?.length) {
-          routeCoords.push(...toFirst.coordinates);
-          navigationSteps.push({ instruction: 'Enter cemetery grounds', distance: 0 }, ...toFirst.steps);
-          totalDistance += toFirst.distance;
-          currentPoint = bestFirst;
-        }
+    // CASE 4: Outside => Inside => go via entrance then internal path
+    else {
+      const entrance = findNearestEntrance();
+      const toEntrance = await getMapboxDirections(userCoords, [entrance.lng, entrance.lat]);
+      if (toEntrance?.coordinates?.length) {
+        routeCoords = mergeRouteLegs(routeCoords, toEntrance.coordinates);
+        totalDistance += toEntrance.distance;
+        navigationSteps.push(...toEntrance.steps);
       }
-
-      if (bestSecond) {
-        const toSecond = await getMapboxDirections([currentPoint.lng, currentPoint.lat], [bestSecond.lng, bestSecond.lat]);
-        if (toSecond?.coordinates?.length) {
-          routeCoords.push(...toSecond.coordinates);
-          navigationSteps.push(...toSecond.steps);
-          totalDistance += toSecond.distance;
-          currentPoint = bestSecond;
-        }
-      }
-
-      await navigateUsingInternalPaths(property, currentPoint);
-    } else {
-      console.warn('Skipping middle points due to backtracking or inefficiency.');
       await navigateUsingInternalPaths(property, entrance);
-    }
-  } else {
-    console.warn('Skipping middle points due to deep southwest target or not eligible.');
-    await navigateUsingInternalPaths(property, entrance);
-  }
-}
-
-
-    if (!selectedLineString?.coordinates?.length) {
-      showError('No internal route found.');
-      stopNavigation();
-      return;
+      if (!selectedLineString?.coordinates?.length) {
+        showError('No internal route found.');
+        stopNavigation();
+        return;
+      }
+      routeCoords = mergeRouteLegs(routeCoords, selectedLineString.coordinates);
+      totalDistance += calculatePathDistance(selectedLineString.coordinates);
+      navigationSteps.push(...createInternalSteps(selectedLineString.coordinates));
     }
 
-    const internalCoords = selectedLineString.coordinates;
-    const internalDistance = calculatePathDistance(internalCoords);
-
-    currentRoute = {
-      coordinates: [...routeCoords, ...internalCoords],
-      distance: totalDistance + internalDistance,
-      steps: [...navigationSteps, ...createInternalSteps(internalCoords)],
-    };
-
+    currentRoute = { coordinates: routeCoords, distance: totalDistance, steps: navigationSteps };
     displayRoute();
-    startNavigationUpdates();
+    startNavigationUpdates(); // ⚠ make sure this has distance-based arrival check
 
   } catch (error) {
     console.error('Navigation error:', error);
@@ -859,63 +833,6 @@ function haversineDistance(coord1, coord2) {
 
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
-
-const firstLayerPoints = [
-  { id: 'A', lat: 14.4727, lng: 120.9767 },
-  { id: 'B', lat: 14.4727, lng: 120.9766 },
-];
-
-const secondLayerPoints = [
-  { id: 'A', lat: 14.4725, lng: 120.9766 },
-  { id: 'B', lat: 14.4725, lng: 120.9766 },
-];
-
-async function getBestMiddleRoute(property, entranceCoords) {
-  let bestFirst = null;
-  let bestSecond = null;
-  let minSecondScore = Infinity;
-
-  // 1. Pick best second-layer point (closest to entrance + toward property)
-  for (const pt of secondLayerPoints) {
-    const distFromEntrance = haversineDistance(entranceCoords, [pt.lng, pt.lat]);
-    const distToTarget = haversineDistance([pt.lng, pt.lat], [property.lng, property.lat]);
-    const score = distFromEntrance + distToTarget;
-
-    if (score < minSecondScore) {
-      bestSecond = pt;
-      minSecondScore = score;
-    }
-  }
-
-  if (!bestSecond) {
-    console.warn("No second-layer point selected.");
-    return { bestFirst: null, bestSecond: null };
-  }
-
-  // 2. Match first-layer point by ID
-  const matchingFirst = firstLayerPoints.find(pt => pt.id === bestSecond.id);
-
-  if (matchingFirst) {
-    bestFirst = matchingFirst;
-  } else {
-    // Fallback: choose first-layer point closest to bestSecond
-    let minFirstDist = Infinity;
-    for (const pt of firstLayerPoints) {
-      const dist = haversineDistance([pt.lng, pt.lat], [bestSecond.lng, bestSecond.lat]);
-      if (dist < minFirstDist) {
-        bestFirst = pt;
-        minFirstDist = dist;
-      }
-    }
-  }
-
-  console.log("🏁 Final Selection:");
-  console.log("Second Layer (picked first):", bestSecond);
-  console.log("First Layer (matched):", bestFirst);
-
-  return { bestFirst, bestSecond };
-}
-
 
 // Route path directions functionality preserved from original
   function getCemeteryBoundary() {
@@ -1169,9 +1086,10 @@ function startNavigationUpdates() {
       currentStep = getCurrentStep(closestIndex);
 
       // Check if arrived
-      if (closestIndex >= currentRoute.coordinates.length - 2) {
-        completeNavigation();
-      }
+        if (distanceToDestination < 8) {
+          completeNavigation();
+        }
+
     }, 1000);
 }
 
@@ -1233,36 +1151,30 @@ function showConfirmation({ title, message, confirmText, cancelText, onConfirm, 
 }
 
 
-  async function getMapboxDirections(start, end) {
-    // Use walking profile to avoid "flying inside cemetery" and get more appropriate paths
-    const url = `https://api.mapbox.com/directions/v5/mapbox/walking/${start[0]},${start[1]};${end[0]},${end[1]}?steps=true&geometries=geojson&access_token=${mapboxgl.accessToken}`;
-    
-    const response = await fetch(url);
-    const data = await response.json();
-    
-    if (data.routes && data.routes.length > 0) {
-      return {
-        coordinates: data.routes[0].geometry.coordinates,
-        distance: data.routes[0].distance,
-        steps: data.routes[0].legs[0].steps.map(step => ({
-          instruction: step.maneuver.instruction,
-          distance: step.distance
-        }))
-      };
-    }
-    
-    throw new Error('No route found');
+// Always trusts the route returned by Mapbox (no more directional filtering)
+async function getMapboxDirections(start, end) {
+  const url =
+    `https://api.mapbox.com/directions/v5/mapbox/walking/` +
+    `${start[0]},${start[1]};${end[0]},${end[1]}` +
+    `?steps=true&geometries=geojson&access_token=${mapboxgl.accessToken}`;
+
+  const response = await fetch(url);
+  const data     = await response.json();
+
+  if (data.routes && data.routes.length > 0) {
+    const route = data.routes[0];
+    return {
+      coordinates: route.geometry.coordinates,
+      distance:    route.distance,
+      steps:       route.legs[0].steps.map(step => ({
+        instruction: step.maneuver.instruction,
+        distance:    step.distance
+      }))
+    };
   }
 
-  function isHeadingEast(route) {
-  const coords = route.geometry.coordinates;
-  const [startLng] = coords[0];
-  const [endLng] = coords[coords.length - 1];
-
-  // If the longitude is increasing significantly, assume it's eastward
-  return (endLng - startLng) > 0.001;
+  throw new Error('No route found');
 }
-
 
 function findClosestPointOnRoute(userPoint, routeCoordinates) {
   let closestPoint = null;
@@ -1492,22 +1404,7 @@ function findNearestRouteIndex(targetPoint, routeCoordinates) {
     distanceToDestination = 0;
   }
 
-  function navigateToExit() {
-    showExitPopup = false;
-    const entrance = findNearestEntrance();
-    
-    if (userLocation) {
-      // Start navigation to cemetery exit
-      startNavigationToProperty({
-        name: "Cemetery Exit",
-        lng: entrance.lng,
-        lat: entrance.lat
-      });
-      showSuccess("Navigating to cemetery exit");
-    } else {
-      showError("Location tracking required for exit navigation");
-    }
-  }
+  
 
   function showSuccess(message) {
     successMessage = message;
