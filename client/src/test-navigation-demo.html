@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cemetery Navigation Test Demo</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #2563eb;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            background: #f9fafb;
+        }
+        .test-section h3 {
+            color: #1f2937;
+            margin-bottom: 15px;
+        }
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #1d4ed8;
+        }
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+        #output {
+            background: #1f2937;
+            color: #10b981;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            max-height: 500px;
+            overflow-y: auto;
+            margin-top: 20px;
+            white-space: pre-wrap;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: #eff6ff;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #bfdbfe;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1d4ed8;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 5px;
+        }
+        .demo-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .status {
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .status.loading {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .status.success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗺️ Cemetery Navigation System Test</h1>
+        
+        <div class="test-section">
+            <h3>📊 System Status</h3>
+            <div id="status" class="status loading">Initializing navigation system...</div>
+            <div class="stats-grid" id="stats" style="display: none;">
+                <div class="stat-card">
+                    <div class="stat-value" id="nodeCount">-</div>
+                    <div class="stat-label">Total Nodes</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="edgeCount">-</div>
+                    <div class="stat-label">Total Edges</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="connectivity">-</div>
+                    <div class="stat-label">Connectivity %</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="successRate">-</div>
+                    <div class="stat-label">Test Success Rate</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>🧪 Navigation Tests</h3>
+            <div class="demo-controls">
+                <button onclick="runBasicTests()" id="basicTestBtn" disabled>
+                    Run Basic Navigation Tests
+                </button>
+                <button onclick="runPerformanceTest()" id="perfTestBtn" disabled>
+                    Run Performance Test
+                </button>
+                <button onclick="testAllGraves()" id="allGravesBtn" disabled>
+                    Test All Grave Blocks
+                </button>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>🎬 Live Demo</h3>
+            <p>Watch step-by-step navigation from the main entrance to different graves:</p>
+            <div class="demo-controls">
+                <button onclick="demoNavigation('Phase 3 Block 5-Adult')" id="demo1Btn" disabled>
+                    Demo: Phase 3 Block 5
+                </button>
+                <button onclick="demoNavigation('P2-14-Bone')" id="demo2Btn" disabled>
+                    Demo: Bone Section
+                </button>
+                <button onclick="demoNavigation('Office')" id="demo3Btn" disabled>
+                    Demo: Office Building
+                </button>
+                <button onclick="customDemo()" id="customBtn" disabled>
+                    Custom Route Demo
+                </button>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>📋 Test Output</h3>
+            <button onclick="clearOutput()">Clear Output</button>
+            <div id="output">Ready to run tests...\n</div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Mock the missing dependencies for standalone testing
+        class CemeteryPathfinder {
+            constructor() {
+                this.graph = new Map();
+                this.nodes = new Map();
+                this.pathways = [];
+            }
+
+            buildGraphFromGeoJSON(geoJsonData) {
+                console.log('🏗️ Building navigation graph...');
+                
+                // First pass: Create all nodes
+                geoJsonData.features.forEach(feature => {
+                    if (feature.geometry.type === 'Point') {
+                        const nodeId = feature.properties.id;
+                        this.nodes.set(nodeId, {
+                            id: nodeId,
+                            name: feature.properties.name,
+                            type: feature.properties.type,
+                            coordinates: feature.geometry.coordinates,
+                            properties: feature.properties
+                        });
+                        this.graph.set(nodeId, []);
+                    }
+                });
+
+                // Second pass: Create edges from LineString pathways  
+                geoJsonData.features.forEach(feature => {
+                    if (feature.geometry.type === 'LineString') {
+                        this.addPathwayToGraph(feature);
+                    }
+                });
+
+                // Third pass: Add connections from node properties
+                this.nodes.forEach((node, nodeId) => {
+                    if (node.properties.connects_to) {
+                        node.properties.connects_to.forEach(connectedId => {
+                            this.addEdge(nodeId, connectedId);
+                        });
+                    }
+                });
+
+                console.log(`✅ Graph built: ${this.nodes.size} nodes, ${this.getTotalEdges()} edges`);
+            }
+
+            addPathwayToGraph(pathwayFeature) {
+                const coords = pathwayFeature.geometry.coordinates;
+                const pathwayProps = pathwayFeature.properties;
+                
+                // Create intermediate nodes for each coordinate in the path
+                for (let i = 0; i < coords.length; i++) {
+                    const nodeId = `${pathwayProps.id}_point_${i}`;
+                    if (!this.nodes.has(nodeId)) {
+                        this.nodes.set(nodeId, {
+                            id: nodeId,
+                            name: `${pathwayProps.name} Point ${i}`,
+                            type: 'path_point',
+                            coordinates: coords[i],
+                            properties: pathwayProps
+                        });
+                        this.graph.set(nodeId, []);
+                    }
+                    
+                    // Connect consecutive points
+                    if (i > 0) {
+                        const prevNodeId = `${pathwayProps.id}_point_${i-1}`;
+                        this.addEdge(prevNodeId, nodeId);
+                    }
+                }
+
+                // Connect pathway endpoints to junction/access points
+                if (pathwayProps.connects_to) {
+                    const startPoint = `${pathwayProps.id}_point_0`;
+                    const endPoint = `${pathwayProps.id}_point_${coords.length-1}`;
+                    
+                    pathwayProps.connects_to.forEach(connectedId => {
+                        this.addEdge(startPoint, connectedId);
+                        this.addEdge(endPoint, connectedId);
+                    });
+                }
+            }
+
+            addEdge(nodeA, nodeB) {
+                if (!this.nodes.has(nodeA) || !this.nodes.has(nodeB)) {
+                    return;
+                }
+
+                const coordsA = this.nodes.get(nodeA).coordinates;
+                const coordsB = this.nodes.get(nodeB).coordinates;
+                const distance = this.calculateDistance(coordsA, coordsB);
+
+                // Add edge A -> B
+                if (!this.graph.get(nodeA).some(edge => edge.to === nodeB)) {
+                    this.graph.get(nodeA).push({ to: nodeB, weight: distance });
+                }
+
+                // Add edge B -> A (bidirectional)
+                if (!this.graph.get(nodeB).some(edge => edge.to === nodeA)) {
+                    this.graph.get(nodeB).push({ to: nodeA, weight: distance });
+                }
+            }
+
+            calculateDistance(coord1, coord2) {
+                const toRad = (deg) => deg * (Math.PI / 180);
+                const R = 6371000; // Earth's radius in meters
+
+                const [lon1, lat1] = coord1;
+                const [lon2, lat2] = coord2;
+
+                const dLat = toRad(lat2 - lat1);
+                const dLon = toRad(lon2 - lon1);
+
+                const a = Math.sin(dLat / 2) ** 2 + 
+                          Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * 
+                          Math.sin(dLon / 2) ** 2;
+
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                return R * c;
+            }
+
+            findShortestPath(startNodeId, endNodeId) {
+                console.log(`🧭 Finding shortest path: ${startNodeId} -> ${endNodeId}`);
+
+                if (!this.nodes.has(startNodeId) || !this.nodes.has(endNodeId)) {
+                    return { success: false, error: 'Start or end node not found' };
+                }
+
+                const distances = new Map();
+                const previous = new Map();
+                const visited = new Set();
+                const priorityQueue = [];
+
+                // Initialize distances
+                this.nodes.forEach((node, nodeId) => {
+                    distances.set(nodeId, nodeId === startNodeId ? 0 : Infinity);
+                });
+
+                priorityQueue.push({ nodeId: startNodeId, distance: 0 });
+
+                while (priorityQueue.length > 0) {
+                    // Sort by distance and get nearest unvisited node
+                    priorityQueue.sort((a, b) => a.distance - b.distance);
+                    const { nodeId: currentNode } = priorityQueue.shift();
+
+                    if (visited.has(currentNode)) continue;
+                    visited.add(currentNode);
+
+                    // Found destination
+                    if (currentNode === endNodeId) break;
+
+                    // Check all neighbors
+                    const neighbors = this.graph.get(currentNode) || [];
+                    neighbors.forEach(({ to: neighbor, weight }) => {
+                        if (visited.has(neighbor)) return;
+
+                        const newDistance = distances.get(currentNode) + weight;
+                        if (newDistance < distances.get(neighbor)) {
+                            distances.set(neighbor, newDistance);
+                            previous.set(neighbor, currentNode);
+                            priorityQueue.push({ nodeId: neighbor, distance: newDistance });
+                        }
+                    });
+                }
+
+                // Reconstruct path
+                const path = [];
+                let current = endNodeId;
+                while (current !== undefined) {
+                    path.unshift(current);
+                    current = previous.get(current);
+                }
+
+                // Convert node IDs to coordinates
+                const coordinates = path.map(nodeId => ({
+                    nodeId,
+                    coordinates: this.nodes.get(nodeId).coordinates,
+                    name: this.nodes.get(nodeId).name,
+                    type: this.nodes.get(nodeId).type
+                }));
+
+                const totalDistance = distances.get(endNodeId);
+                const estimatedDuration = this.estimateWalkingTime(totalDistance);
+
+                console.log(`✅ Path found: ${path.length} nodes, ${totalDistance.toFixed(2)}m, ~${estimatedDuration}min`);
+
+                return {
+                    path: coordinates,
+                    nodeIds: path,
+                    distance: totalDistance,
+                    duration: estimatedDuration,
+                    success: totalDistance !== Infinity
+                };
+            }
+
+            findNearestNode(targetCoords) {
+                let nearestNode = null;
+                let minDistance = Infinity;
+
+                this.nodes.forEach((node, nodeId) => {
+                    const distance = this.calculateDistance(targetCoords, node.coordinates);
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        nearestNode = nodeId;
+                    }
+                });
+
+                return nearestNode;
+            }
+
+            findNodeByBlock(blockName) {
+                for (const [nodeId, node] of this.nodes) {
+                    if (node.properties.serves_block === blockName || node.name === blockName) {
+                        return nodeId;
+                    }
+                }
+                return null;
+            }
+
+            estimateWalkingTime(distance) {
+                const walkingSpeedMps = 1.4; // Average walking speed: 1.4 m/s
+                return Math.ceil(distance / walkingSpeedMps / 60);
+            }
+
+            getTotalEdges() {
+                let totalEdges = 0;
+                this.graph.forEach(edges => totalEdges += edges.length);
+                return totalEdges / 2; // Divide by 2 since edges are bidirectional
+            }
+
+            getReachableNodes(nodeId) {
+                const reachable = new Set();
+                const queue = [nodeId];
+
+                while (queue.length > 0) {
+                    const current = queue.shift();
+                    if (reachable.has(current)) continue;
+                    
+                    reachable.add(current);
+                    const neighbors = this.graph.get(current) || [];
+                    neighbors.forEach(({ to }) => {
+                        if (!reachable.has(to)) {
+                            queue.push(to);
+                        }
+                    });
+                }
+
+                return Array.from(reachable);
+            }
+        }
+
+        // Navigation Tester class (simplified for demo)
+        class NavigationTester {
+            constructor() {
+                this.pathfinder = new CemeteryPathfinder();
+                this.testResults = [];
+            }
+
+            async initialize() {
+                try {
+                    log('🚀 Initializing Navigation Test Suite...');
+                    
+                    // Load pathway data from the comprehensive paths file
+                    const response = await fetch('./comprehensive-paths.geojson');
+                    const pathwayData = await response.json();
+                    
+                    // Build graph
+                    this.pathfinder.buildGraphFromGeoJSON(pathwayData);
+                    
+                    log('✅ Test system initialized');
+                    log(`📊 Graph: ${this.pathfinder.nodes.size} nodes, ${this.pathfinder.getTotalEdges()} edges`);
+                    
+                    return true;
+                } catch (error) {
+                    log(`❌ Test initialization failed: ${error.message}`);
+                    return false;
+                }
+            }
+
+            async testNavigationToGraves() {
+                log('\n🎯 Testing Navigation from Main Entrance to Graves...\n');
+
+                const testCases = [
+                    {
+                        name: 'Phase 3 Block 5-Adult',
+                        coordinates: [120.9753, 14.47096],
+                        description: 'Popular adult section'
+                    },
+                    {
+                        name: 'P2-14-Bone',
+                        coordinates: [120.9758, 14.47119],
+                        description: 'Bone/cremation section'
+                    },
+                    {
+                        name: 'Phase 2 Block 15-Adult',
+                        coordinates: [120.976, 14.47176], 
+                        description: 'Phase 2 adult section'
+                    },
+                    {
+                        name: 'Office',
+                        coordinates: [120.9767, 14.47266],
+                        description: 'Administrative office'
+                    },
+                    {
+                        name: 'C3-Child',
+                        coordinates: [120.9765, 14.47255],
+                        description: 'Children section'
+                    }
+                ];
+
+                const mainEntranceCoords = [120.9767, 14.4727];
+                
+                for (const testCase of testCases) {
+                    await this.runSingleNavigationTest(mainEntranceCoords, testCase);
+                }
+
+                this.printTestSummary();
+            }
+
+            async runSingleNavigationTest(startCoords, testCase) {
+                try {
+                    log(`\n🧭 Testing route to: ${testCase.name}`);
+                    log(`📍 Target coordinates: [${testCase.coordinates.join(', ')}]`);
+                    
+                    // Find start and end nodes
+                    const startNodeId = this.pathfinder.findNearestNode(startCoords);
+                    const endNodeId = this.pathfinder.findNearestNode(testCase.coordinates);
+                    
+                    log(`🔍 Start node: ${startNodeId}`);
+                    log(`🔍 End node: ${endNodeId}`);
+                    
+                    // Calculate path
+                    const startTime = performance.now();
+                    const pathResult = this.pathfinder.findShortestPath(startNodeId, endNodeId);
+                    const endTime = performance.now();
+                    
+                    const testResult = {
+                        name: testCase.name,
+                        description: testCase.description,
+                        startNode: startNodeId,
+                        endNode: endNodeId,
+                        success: pathResult.success,
+                        distance: pathResult.distance,
+                        duration: pathResult.duration,
+                        pathLength: pathResult.path?.length || 0,
+                        calculationTime: endTime - startTime,
+                        route: pathResult.path?.map(p => p.name || p.nodeId) || []
+                    };
+
+                    if (pathResult.success) {
+                        log(`✅ Route found!`);
+                        log(`📏 Distance: ${pathResult.distance.toFixed(1)}m`);
+                        log(`⏱️ Walking time: ~${pathResult.duration} minutes`);
+                        log(`🔢 Path nodes: ${pathResult.path.length}`);
+                        log(`⚡ Calculation: ${(endTime - startTime).toFixed(2)}ms`);
+                        log(`🗺️ Route: ${testResult.route.slice(0, 5).join(' → ')}${testResult.route.length > 5 ? '...' : ''}`);
+                    } else {
+                        log(`❌ No route found`);
+                        testResult.error = 'No path found';
+                    }
+
+                    this.testResults.push(testResult);
+                    
+                } catch (error) {
+                    log(`❌ Test failed for ${testCase.name}: ${error.message}`);
+                    this.testResults.push({
+                        name: testCase.name,
+                        success: false,
+                        error: error.message
+                    });
+                }
+            }
+
+            async demonstrateNavigation(targetGrave = 'Phase 3 Block 5-Adult') {
+                log(`\n🎬 DEMO: Walking from Main Entrance to ${targetGrave}\n`);
+
+                const mainEntranceCoords = [120.9767, 14.4727];
+                
+                // Find target coordinates from test cases
+                const graveCoords = {
+                    'Phase 3 Block 5-Adult': [120.9753, 14.47096],
+                    'P2-14-Bone': [120.9758, 14.47119],
+                    'Office': [120.9767, 14.47266]
+                }[targetGrave] || [120.9753, 14.47096];
+
+                // Calculate route
+                const startNodeId = this.pathfinder.findNearestNode(mainEntranceCoords);
+                const endNodeId = this.pathfinder.findNearestNode(graveCoords);
+                const pathResult = this.pathfinder.findShortestPath(startNodeId, endNodeId);
+
+                if (!pathResult.success) {
+                    log('❌ Demo failed - no route found');
+                    return;
+                }
+
+                log(`🚶‍♂️ Walking Route to ${targetGrave}:`);
+                log(`📏 Total distance: ${pathResult.distance.toFixed(1)}m`);
+                log(`⏱️ Estimated time: ${pathResult.duration} minutes\n`);
+
+                // Simulate step-by-step navigation
+                for (let i = 0; i < pathResult.path.length; i++) {
+                    const step = pathResult.path[i];
+                    
+                    await new Promise(resolve => setTimeout(resolve, 800)); // 0.8 second delay
+                    
+                    if (i === 0) {
+                        log(`🚪 START: ${step.name || 'Main Entrance'}`);
+                    } else if (i === pathResult.path.length - 1) {
+                        log(`🎯 DESTINATION REACHED: ${targetGrave}`);
+                        log(`✅ Navigation complete!`);
+                    } else {
+                        log(`${i}. ${step.name || step.nodeId} → Continue forward`);
+                    }
+                }
+
+                return pathResult;
+            }
+
+            printTestSummary() {
+                log('\n📋 TEST SUMMARY\n');
+                log('='.repeat(50));
+                
+                const successful = this.testResults.filter(r => r.success);
+                const failed = this.testResults.filter(r => !r.success);
+                
+                log(`✅ Successful routes: ${successful.length}`);
+                log(`❌ Failed routes: ${failed.length}`);
+                log(`📊 Success rate: ${((successful.length / this.testResults.length) * 100).toFixed(1)}%`);
+                
+                if (successful.length > 0) {
+                    const avgDistance = successful.reduce((sum, r) => sum + r.distance, 0) / successful.length;
+                    const avgTime = successful.reduce((sum, r) => sum + r.calculationTime, 0) / successful.length;
+                    
+                    log(`📏 Average distance: ${avgDistance.toFixed(1)}m`);
+                    log(`⚡ Average calculation time: ${avgTime.toFixed(2)}ms`);
+                }
+                
+                log('\n📝 Detailed Results:');
+                this.testResults.forEach((result, index) => {
+                    log(`${index + 1}. ${result.name}: ${result.success ? '✅' : '❌'} ${result.success ? `(${result.distance.toFixed(1)}m)` : result.error || ''}`);
+                });
+                
+                log('\n' + '='.repeat(50));
+
+                // Update UI stats
+                updateStats(this.getSystemStats());
+            }
+
+            getSystemStats() {
+                const successful = this.testResults.filter(r => r.success);
+                const connectivity = this.testConnectivity();
+                
+                return {
+                    totalNodes: this.pathfinder.nodes.size,
+                    totalEdges: this.pathfinder.getTotalEdges(),
+                    successRate: this.testResults.length > 0 ? ((successful.length / this.testResults.length) * 100).toFixed(1) : '0',
+                    connectivity: connectivity.connectivityPercent
+                };
+            }
+
+            testConnectivity() {
+                const mainEntranceNode = 'main_entrance';
+                if (!this.pathfinder.nodes.has(mainEntranceNode)) {
+                    return { connectivityPercent: '0' };
+                }
+
+                const reachableNodes = this.pathfinder.getReachableNodes(mainEntranceNode);
+                const totalNodes = this.pathfinder.nodes.size;
+                
+                return {
+                    connectivityPercent: ((reachableNodes.length / totalNodes) * 100).toFixed(1)
+                };
+            }
+        }
+
+        // Global variables
+        let tester;
+        let isSystemReady = false;
+
+        // Utility functions
+        function log(message) {
+            const output = document.getElementById('output');
+            output.textContent += message + '\n';
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function clearOutput() {
+            document.getElementById('output').textContent = 'Output cleared...\n';
+        }
+
+        function updateStatus(message, type = 'loading') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+
+        function updateStats(stats) {
+            document.getElementById('nodeCount').textContent = stats.totalNodes;
+            document.getElementById('edgeCount').textContent = stats.totalEdges;
+            document.getElementById('connectivity').textContent = stats.connectivity + '%';
+            document.getElementById('successRate').textContent = stats.successRate + '%';
+            document.getElementById('stats').style.display = 'grid';
+        }
+
+        function enableButtons() {
+            const buttons = ['basicTestBtn', 'perfTestBtn', 'allGravesBtn', 'demo1Btn', 'demo2Btn', 'demo3Btn', 'customBtn'];
+            buttons.forEach(id => {
+                document.getElementById(id).disabled = false;
+            });
+        }
+
+        // Test functions (called by buttons)
+        window.runBasicTests = async function() {
+            if (!isSystemReady) return;
+            log('\n🧪 Running Basic Navigation Tests...\n');
+            await tester.testNavigationToGraves();
+        };
+
+        window.runPerformanceTest = async function() {
+            if (!isSystemReady) return;
+            log('\n⚡ Running Performance Tests...\n');
+            
+            const iterations = 50;
+            const nodeIds = Array.from(tester.pathfinder.nodes.keys());
+            let successCount = 0;
+            let totalTime = 0;
+
+            log(`🔄 Testing ${iterations} random routes...\n`);
+
+            const startTime = performance.now();
+            for (let i = 0; i < iterations; i++) {
+                const startId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+                const endId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+                
+                if (startId !== endId) {
+                    const testStart = performance.now();
+                    const result = tester.pathfinder.findShortestPath(startId, endId);
+                    const testEnd = performance.now();
+                    
+                    if (result.success) successCount++;
+                    totalTime += (testEnd - testStart);
+                }
+            }
+            const endTime = performance.now();
+
+            log(`📊 Performance Results:`);
+            log(`   Success rate: ${((successCount / iterations) * 100).toFixed(1)}%`);
+            log(`   Average time: ${(totalTime / iterations).toFixed(2)}ms per calculation`);
+            log(`   Total time: ${(endTime - startTime).toFixed(2)}ms`);
+        };
+
+        window.testAllGraves = async function() {
+            if (!isSystemReady) return;
+            log('\n🔍 Testing All Grave Blocks...\n');
+            
+            const mainEntranceCoords = [120.9767, 14.4727];
+            const allBlocks = [
+                { name: 'Phase 3 Block 5-Adult', coords: [120.9753, 14.47096] },
+                { name: 'P2-14-Bone', coords: [120.9758, 14.47119] },
+                { name: 'Block 4', coords: [120.9757, 14.47205] },
+                { name: 'Block 5', coords: [120.9763, 14.4724] },
+                { name: 'Block 6', coords: [120.9767, 14.47274] },
+                { name: 'Phase 2 Block 15-Adult', coords: [120.976, 14.47176] },
+                { name: 'Phase 2 Block 13-Bone', coords: [120.976, 14.47174] },
+                { name: 'Office', coords: [120.9767, 14.47266] }
+            ];
+
+            let successCount = 0;
+            for (const block of allBlocks) {
+                const startNodeId = tester.pathfinder.findNearestNode(mainEntranceCoords);
+                const endNodeId = tester.pathfinder.findNearestNode(block.coords);
+                const result = tester.pathfinder.findShortestPath(startNodeId, endNodeId);
+                
+                if (result.success) {
+                    successCount++;
+                    log(`✅ ${block.name}: ${result.distance.toFixed(1)}m, ~${result.duration}min`);
+                } else {
+                    log(`❌ ${block.name}: No route found`);
+                }
+            }
+
+            log(`\n📊 Coverage: ${successCount}/${allBlocks.length} blocks reachable (${((successCount/allBlocks.length)*100).toFixed(1)}%)`);
+        };
+
+        window.demoNavigation = async function(targetGrave) {
+            if (!isSystemReady) return;
+            await tester.demonstrateNavigation(targetGrave);
+        };
+
+        window.customDemo = async function() {
+            if (!isSystemReady) return;
+            const target = prompt('Enter grave name or use default:', 'Phase 3 Block 5-Adult');
+            if (target) {
+                await tester.demonstrateNavigation(target);
+            }
+        };
+
+        // Initialize system on page load
+        window.addEventListener('load', async function() {
+            log('🚀 Initializing Cemetery Navigation Test System...\n');
+            
+            tester = new NavigationTester();
+            
+            try {
+                const success = await tester.initialize();
+                if (success) {
+                    updateStatus('✅ Navigation system ready!', 'success');
+                    isSystemReady = true;
+                    enableButtons();
+                    
+                    // Show initial stats
+                    const stats = tester.getSystemStats();
+                    updateStats(stats);
+                    
+                    log('🎉 System ready! You can now run tests.\n');
+                } else {
+                    updateStatus('❌ Failed to initialize navigation system', 'error');
+                }
+            } catch (error) {
+                updateStatus(`❌ Initialization error: ${error.message}`, 'error');
+                log(`❌ Error: ${error.message}\n`);
+            }
+        });
+    </script>
+</body>
+</html>
