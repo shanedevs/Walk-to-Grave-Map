@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cemetery On-Site Navigation Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 10px;
+        }
+        
+        .app-container {
+            max-width: 450px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .app-header {
+            background: linear-gradient(45deg, #2196f3, #21cbf3);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .app-header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+        
+        .app-header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .navigation-container {
+            padding: 0;
+        }
+        
+        .test-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .test-info h3 {
+            color: #495057;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+        
+        .test-info ul {
+            list-style: none;
+            font-size: 13px;
+            color: #6c757d;
+        }
+        
+        .test-info li {
+            margin-bottom: 4px;
+        }
+        
+        .test-info li:before {
+            content: "✓ ";
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .emergency-stop {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 50%;
+            font-size: 16px;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(220,53,69,0.3);
+            z-index: 1000;
+        }
+        
+        .emergency-stop:active {
+            transform: scale(0.95);
+        }
+        
+        .field-notes {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px;
+            font-size: 13px;
+        }
+        
+        .field-notes h4 {
+            color: #856404;
+            margin-bottom: 8px;
+        }
+        
+        .field-notes ul {
+            color: #856404;
+            margin-left: 15px;
+        }
+        
+        .gps-indicator {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            background: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            z-index: 999;
+        }
+        
+        .gps-indicator.good { border-left: 4px solid #28a745; }
+        .gps-indicator.fair { border-left: 4px solid #ffc107; }
+        .gps-indicator.poor { border-left: 4px solid #dc3545; }
+        
+        .footer {
+            background: #f8f9fa;
+            padding: 15px;
+            text-align: center;
+            font-size: 12px;
+            color: #6c757d;
+            border-top: 1px solid #dee2e6;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="app-header">
+            <h1>🗺️ Cemetery Navigation</h1>
+            <p>On-Site Real-Time Testing</p>
+        </div>
+        
+        <div class="test-info">
+            <h3>📋 Field Testing Guide</h3>
+            <ul>
+                <li>Ensure GPS/Location is enabled</li>
+                <li>Stand in open area for best GPS signal</li>
+                <li>Wait for "GPS Ready" indicator</li>
+                <li>Test navigation between different grave blocks</li>
+                <li>Verify "arrival" detection accuracy</li>
+            </ul>
+        </div>
+        
+        <div class="navigation-container" id="navigation-container">
+            <!-- Navigation UI will be inserted here -->
+        </div>
+        
+        <div class="field-notes">
+            <h4>📝 Field Notes</h4>
+            <ul>
+                <li><strong>Arrival Threshold:</strong> 3 meters (adjustable)</li>
+                <li><strong>Waypoint Threshold:</strong> 8 meters (optimized for cemetery paths)</li>
+                <li><strong>GPS Update:</strong> Every 0.5 seconds for real-time feel</li>
+                <li><strong>Off-Route Detection:</strong> 15 meters from planned path</li>
+            </ul>
+        </div>
+        
+        <div class="footer">
+            <p>🚀 Real-Time Cemetery Navigation System v2.0</p>
+            <p>Optimized for on-site field testing</p>
+        </div>
+    </div>
+    
+    <!-- Emergency stop button -->
+    <button class="emergency-stop" id="emergency-stop" title="Emergency Stop">🛑</button>
+    
+    <!-- GPS indicator -->
+    <div class="gps-indicator" id="gps-indicator">📍 GPS: Initializing...</div>
+
+    <script type="module">
+        // Simplified pathfinder for on-site testing
+        class CemeteryPathfinder {
+            constructor() {
+                this.graph = new Map();
+                this.nodes = new Map();
+                this.pathwayData = null;
+            }
+
+            async loadPathwayData() {
+                // Embedded pathway data for testing
+                this.pathwayData = {
+                    "type": "FeatureCollection",
+                    "features": [
+                        {
+                            "type": "Feature",
+                            "properties": { 
+                                "id": "main_entrance",
+                                "name": "Main Entrance", 
+                                "type": "entrance",
+                                "connects_to": ["central_hub"]
+                            },
+                            "geometry": {
+                                "type": "Point",
+                                "coordinates": [120.9767, 14.4727]
+                            }
+                        },
+                        {
+                            "type": "Feature",
+                            "properties": { 
+                                "id": "central_hub",
+                                "name": "Central Hub", 
+                                "type": "junction",
+                                "connects_to": ["main_entrance", "phase3_access", "bone_section_access", "office_access"]
+                            },
+                            "geometry": {
+                                "type": "Point",
+                                "coordinates": [120.9763, 14.47240]
+                            }
+                        },
+                        {
+                            "type": "Feature",
+                            "properties": { 
+                                "id": "phase3_access",
+                                "name": "Phase 3 Block 5-Adult Access", 
+                                "type": "block_access",
+                                "connects_to": ["central_hub", "phase3_block5"]
+                            },
+                            "geometry": {
+                                "type": "Point",
+                                "coordinates": [120.9755, 14.47120]
+                            }
+                        },
+                        {
+                            "type": "Feature",
+                            "properties": { 
+                                "id": "phase3_block5",
+                                "name": "Phase 3 Block 5-Adult", 
+                                "type": "grave_block",
+                                "connects_to": ["phase3_access"]
+                            },
+                            "geometry": {
+                                "type": "Point",
+                                "coordinates": [120.9753, 14.47096]
+                            }
+                        },
+                        {
+                            "type": "Feature",
+                            "properties": { 
+                                "id": "bone_section_access",
+                                "name": "P2-14-Bone Access", 
+                                "type": "block_access",
+                                "connects_to": ["central_hub", "bone_section"]
+                            },
+                            "geometry": {
+                                "type": "Point",
+                                "coordinates": [120.9760, 14.47135]
+                            }
+                        },
+                        {
+                            "type": "Feature",
+                            "properties": { 
+                                "id": "bone_section",
+                                "name": "P2-14-Bone", 
+                                "type": "grave_block",
+                                "connects_to": ["bone_section_access"]
+                            },
+                            "geometry": {
+                                "type": "Point",
+                                "coordinates": [120.9758, 14.47119]
+                            }
+                        },
+                        {
+                            "type": "Feature",
+                            "properties": { 
+                                "id": "office_access",
+                                "name": "Cemetery Office", 
+                                "type": "facility",
+                                "connects_to": ["central_hub"]
+                            },
+                            "geometry": {
+                                "type": "Point",
+                                "coordinates": [120.9767, 14.47266]
+                            }
+                        }
+                    ]
+                };
+                
+                this.buildGraphFromGeoJSON(this.pathwayData);
+                console.log('✅ Pathway data loaded for on-site testing');
+            }
+
+            buildGraphFromGeoJSON(geoJsonData) {
+                // Create nodes
+                geoJsonData.features.forEach(feature => {
+                    if (feature.geometry.type === 'Point') {
+                        const nodeId = feature.properties.id;
+                        this.nodes.set(nodeId, {
+                            id: nodeId,
+                            name: feature.properties.name,
+                            type: feature.properties.type,
+                            coordinates: feature.geometry.coordinates,
+                            properties: feature.properties
+                        });
+                        this.graph.set(nodeId, []);
+                    }
+                });
+
+                // Add connections
+                this.nodes.forEach((node, nodeId) => {
+                    if (node.properties.connects_to) {
+                        node.properties.connects_to.forEach(connectedId => {
+                            this.addEdge(nodeId, connectedId);
+                        });
+                    }
+                });
+            }
+
+            addEdge(nodeA, nodeB) {
+                if (!this.nodes.has(nodeA) || !this.nodes.has(nodeB)) return;
+
+                const coordsA = this.nodes.get(nodeA).coordinates;
+                const coordsB = this.nodes.get(nodeB).coordinates;
+                const distance = this.calculateDistance(coordsA, coordsB);
+
+                this.graph.get(nodeA).push({ to: nodeB, weight: distance });
+                this.graph.get(nodeB).push({ to: nodeA, weight: distance });
+            }
+
+            calculateDistance(coord1, coord2) {
+                const toRad = (deg) => deg * (Math.PI / 180);
+                const R = 6371000;
+
+                const [lon1, lat1] = coord1;
+                const [lon2, lat2] = coord2;
+
+                const dLat = toRad(lat2 - lat1);
+                const dLon = toRad(lon2 - lon1);
+
+                const a = Math.sin(dLat / 2) ** 2 + 
+                          Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * 
+                          Math.sin(dLon / 2) ** 2;
+
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                return R * c;
+            }
+
+            findShortestPath(startNodeId, endNodeId) {
+                if (!this.nodes.has(startNodeId) || !this.nodes.has(endNodeId)) {
+                    return { success: false, error: 'Start or end node not found' };
+                }
+
+                const distances = new Map();
+                const previous = new Map();
+                const visited = new Set();
+                const priorityQueue = [];
+
+                this.nodes.forEach((node, nodeId) => {
+                    distances.set(nodeId, nodeId === startNodeId ? 0 : Infinity);
+                });
+
+                priorityQueue.push({ nodeId: startNodeId, distance: 0 });
+
+                while (priorityQueue.length > 0) {
+                    priorityQueue.sort((a, b) => a.distance - b.distance);
+                    const { nodeId: currentNode } = priorityQueue.shift();
+
+                    if (visited.has(currentNode)) continue;
+                    visited.add(currentNode);
+
+                    if (currentNode === endNodeId) break;
+
+                    const neighbors = this.graph.get(currentNode) || [];
+                    neighbors.forEach(({ to: neighbor, weight }) => {
+                        if (visited.has(neighbor)) return;
+
+                        const newDistance = distances.get(currentNode) + weight;
+                        if (newDistance < distances.get(neighbor)) {
+                            distances.set(neighbor, newDistance);
+                            previous.set(neighbor, currentNode);
+                            priorityQueue.push({ nodeId: neighbor, distance: newDistance });
+                        }
+                    });
+                }
+
+                const path = [];
+                let current = endNodeId;
+                while (current !== undefined) {
+                    path.unshift(current);
+                    current = previous.get(current);
+                }
+
+                const totalDistance = distances.get(endNodeId);
+                const estimatedDuration = Math.ceil(totalDistance / 1.4 / 60);
+
+                return {
+                    path: path.map(nodeId => ({
+                        nodeId,
+                        coordinates: this.nodes.get(nodeId).coordinates,
+                        name: this.nodes.get(nodeId).name,
+                        type: this.nodes.get(nodeId).type
+                    })),
+                    distance: totalDistance,
+                    duration: estimatedDuration,
+                    success: totalDistance !== Infinity
+                };
+            }
+
+            findNearestNode(targetCoords) {
+                let nearestNode = null;
+                let minDistance = Infinity;
+
+                this.nodes.forEach((node, nodeId) => {
+                    const distance = this.calculateDistance(targetCoords, node.coordinates);
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        nearestNode = nodeId;
+                    }
+                });
+
+                return nearestNode;
+            }
+        }
+
+        // Real-time GPS Navigation (embedded)
+        class RealTimeGPSNavigation {
+            constructor(options = {}) {
+                this.options = {
+                    arrivalThreshold: 3,
+                    waypointThreshold: 8,
+                    offRouteThreshold: 15,
+                    enableHighAccuracy: true,
+                    maximumAge: 500,
+                    timeout: 10000,
+                    minProgressDistance: 1,
+                    stationaryTimeout: 45000,
+                    positionUpdateInterval: 500,
+                    navigationUpdateInterval: 250,
+                    ...options
+                };
+                
+                this.isNavigating = false;
+                this.currentRoute = null;
+                this.currentPosition = null;
+                this.currentWaypointIndex = 0;
+                this.navigationHistory = [];
+                this.watchId = null;
+                this.lastProgressTime = null;
+                this.totalDistanceTraveled = 0;
+                this.estimatedTimeRemaining = 0;
+                
+                this.onLocationUpdate = null;
+                this.onNavigationUpdate = null;
+                this.onWaypointReached = null;
+                this.onDestinationReached = null;
+                this.onOffRoute = null;
+                this.onNavigationError = null;
+                
+                this.pathfinder = null;
+            }
+
+            async startRealTimeNavigation(startCoords, endCoords, pathfinder) {
+                try {
+                    console.log('🚀 Starting real-time GPS navigation...');
+                    
+                    this.pathfinder = pathfinder;
+                    
+                    if (!navigator.geolocation) {
+                        throw new Error('GPS/Geolocation not supported on this device');
+                    }
+
+                    const startNode = pathfinder.findNearestNode(startCoords);
+                    const endNode = pathfinder.findNearestNode(endCoords);
+                    
+                    const routeResult = pathfinder.findShortestPath(startNode, endNode);
+                    
+                    if (!routeResult.success) {
+                        throw new Error('Could not calculate route to destination');
+                    }
+
+                    this.currentRoute = {
+                        ...routeResult,
+                        startCoords,
+                        endCoords,
+                        startTime: Date.now()
+                    };
+                    
+                    this.currentWaypointIndex = 0;
+                    this.isNavigating = true;
+                    this.navigationHistory = [];
+                    this.totalDistanceTraveled = 0;
+                    
+                    console.log(`✅ Route calculated: ${routeResult.distance.toFixed(1)}m, ${routeResult.path.length} waypoints`);
+                    
+                    this.startGPSTracking();
+                    this.startNavigationLoop();
+                    
+                    return {
+                        success: true,
+                        route: this.currentRoute,
+                        message: 'Real-time navigation started'
+                    };
+                    
+                } catch (error) {
+                    console.error('❌ Navigation start failed:', error);
+                    this.handleNavigationError(error);
+                    return {
+                        success: false,
+                        error: error.message
+                    };
+                }
+            }
+
+            startGPSTracking() {
+                const options = {
+                    enableHighAccuracy: this.options.enableHighAccuracy,
+                    maximumAge: this.options.maximumAge,
+                    timeout: this.options.timeout
+                };
+
+                this.watchId = navigator.geolocation.watchPosition(
+                    (position) => this.handleLocationUpdate(position),
+                    (error) => this.handleLocationError(error),
+                    options
+                );
+                
+                console.log('📍 GPS tracking started');
+            }
+
+            handleLocationUpdate(position) {
+                const newPosition = {
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                    accuracy: position.coords.accuracy,
+                    timestamp: Date.now(),
+                    coords: [position.coords.longitude, position.coords.latitude]
+                };
+
+                // Update GPS indicator
+                const gpsIndicator = document.getElementById('gps-indicator');
+                if (gpsIndicator) {
+                    if (newPosition.accuracy <= 5) {
+                        gpsIndicator.className = 'gps-indicator good';
+                        gpsIndicator.textContent = `📍 GPS: ${newPosition.accuracy.toFixed(1)}m (Excellent)`;
+                    } else if (newPosition.accuracy <= 10) {
+                        gpsIndicator.className = 'gps-indicator fair';
+                        gpsIndicator.textContent = `📍 GPS: ${newPosition.accuracy.toFixed(1)}m (Good)`;
+                    } else {
+                        gpsIndicator.className = 'gps-indicator poor';
+                        gpsIndicator.textContent = `📍 GPS: ${newPosition.accuracy.toFixed(1)}m (Poor)`;
+                    }
+                }
+
+                if (this.currentPosition) {
+                    const distanceMoved = this.calculateDistance(
+                        this.currentPosition.coords,
+                        newPosition.coords
+                    );
+                    
+                    if (distanceMoved >= this.options.minProgressDistance) {
+                        this.totalDistanceTraveled += distanceMoved;
+                        this.lastProgressTime = Date.now();
+                        
+                        this.navigationHistory.push({
+                            position: newPosition,
+                            waypointIndex: this.currentWaypointIndex,
+                            timestamp: Date.now()
+                        });
+                        
+                        if (this.navigationHistory.length > 100) {
+                            this.navigationHistory.shift();
+                        }
+                    }
+                }
+
+                this.currentPosition = newPosition;
+                
+                if (this.onLocationUpdate) {
+                    this.onLocationUpdate(newPosition);
+                }
+            }
+
+            handleLocationError(error) {
+                console.error('📍 GPS Error:', error.message);
+                
+                const errorMessages = {
+                    1: 'GPS permission denied',
+                    2: 'GPS position unavailable', 
+                    3: 'GPS timeout'
+                };
+                
+                this.handleNavigationError(new Error(errorMessages[error.code] || 'GPS error'));
+            }
+
+            startNavigationLoop() {
+                const updateInterval = setInterval(() => {
+                    if (!this.isNavigating || !this.currentPosition) {
+                        return;
+                    }
+
+                    this.updateNavigation();
+                    
+                }, this.options.navigationUpdateInterval);
+
+                this.navigationInterval = updateInterval;
+            }
+
+            updateNavigation() {
+                if (!this.currentRoute || !this.currentPosition) return;
+
+                const currentWaypoint = this.currentRoute.path[this.currentWaypointIndex];
+                const nextWaypoint = this.currentRoute.path[this.currentWaypointIndex + 1];
+                
+                if (!currentWaypoint) {
+                    this.completeNavigation();
+                    return;
+                }
+
+                const distanceToWaypoint = this.calculateDistance(
+                    this.currentPosition.coords,
+                    currentWaypoint.coordinates
+                );
+
+                const finalDestination = this.currentRoute.path[this.currentRoute.path.length - 1];
+                const distanceToDestination = this.calculateDistance(
+                    this.currentPosition.coords,
+                    finalDestination.coordinates
+                );
+
+                // Check if reached final destination (FIXED: proper threshold check)
+                if (distanceToDestination <= this.options.arrivalThreshold && 
+                    this.currentWaypointIndex >= this.currentRoute.path.length - 2) {
+                    this.reachDestination();
+                    return;
+                }
+
+                // Check if reached current waypoint
+                if (distanceToWaypoint <= this.options.waypointThreshold) {
+                    this.reachWaypoint();
+                    return;
+                }
+
+                this.updateProgressEstimates();
+
+                const navigationUpdate = {
+                    currentPosition: this.currentPosition,
+                    currentWaypoint,
+                    nextWaypoint,
+                    distanceToWaypoint: distanceToWaypoint,
+                    distanceToDestination: distanceToDestination,
+                    totalDistanceTraveled: this.totalDistanceTraveled,
+                    estimatedTimeRemaining: this.estimatedTimeRemaining,
+                    waypointIndex: this.currentWaypointIndex,
+                    totalWaypoints: this.currentRoute.path.length,
+                    bearing: nextWaypoint ? this.calculateBearing(
+                        this.currentPosition.coords,
+                        nextWaypoint.coordinates
+                    ) : null,
+                    instruction: this.generateInstruction(currentWaypoint, nextWaypoint, distanceToWaypoint)
+                };
+
+                if (this.onNavigationUpdate) {
+                    this.onNavigationUpdate(navigationUpdate);
+                }
+            }
+
+            reachWaypoint() {
+                if (this.currentWaypointIndex < this.currentRoute.path.length - 1) {
+                    this.currentWaypointIndex++;
+                    
+                    const waypoint = this.currentRoute.path[this.currentWaypointIndex];
+                    console.log(`🎯 Reached waypoint: ${waypoint.name || waypoint.nodeId}`);
+                    
+                    if (this.onWaypointReached) {
+                        this.onWaypointReached({
+                            waypoint,
+                            waypointIndex: this.currentWaypointIndex,
+                            totalWaypoints: this.currentRoute.path.length
+                        });
+                    }
+                }
+            }
+
+            reachDestination() {
+                console.log('🏁 Destination reached!');
+                
+                this.isNavigating = false;
+                
+                if (this.onDestinationReached) {
+                    this.onDestinationReached({
+                        destination: this.currentRoute.path[this.currentRoute.path.length - 1],
+                        totalDistanceTraveled: this.totalDistanceTraveled,
+                        totalTime: Date.now() - this.currentRoute.startTime,
+                        navigationHistory: this.navigationHistory
+                    });
+                }
+                
+                this.stopNavigation();
+            }
+
+            generateInstruction(currentWaypoint, nextWaypoint, distanceToWaypoint) {
+                if (!nextWaypoint) {
+                    return `Continue to ${currentWaypoint.name || 'destination'}`;
+                }
+                
+                const direction = this.getCardinalDirection(
+                    this.calculateBearing(currentWaypoint.coordinates, nextWaypoint.coordinates)
+                );
+                
+                if (distanceToWaypoint < 20) {
+                    return `In ${Math.round(distanceToWaypoint)}m, head ${direction} to ${nextWaypoint.name}`;
+                } else {
+                    return `Continue ${Math.round(distanceToWaypoint)}m to ${currentWaypoint.name}, then head ${direction}`;
+                }
+            }
+
+            calculateBearing(coord1, coord2) {
+                const [lon1, lat1] = coord1;
+                const [lon2, lat2] = coord2;
+                
+                const dLon = (lon2 - lon1) * Math.PI / 180;
+                const lat1Rad = lat1 * Math.PI / 180;
+                const lat2Rad = lat2 * Math.PI / 180;
+                
+                const y = Math.sin(dLon) * Math.cos(lat2Rad);
+                const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) - 
+                          Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
+                
+                let bearing = Math.atan2(y, x) * 180 / Math.PI;
+                return (bearing + 360) % 360;
+            }
+
+            getCardinalDirection(bearing) {
+                const directions = ['North', 'Northeast', 'East', 'Southeast', 'South', 'Southwest', 'West', 'Northwest'];
+                const index = Math.round(bearing / 45) % 8;
+                return directions[index];
+            }
+
+            calculateDistance(coord1, coord2) {
+                const toRad = (deg) => deg * (Math.PI / 180);
+                const R = 6371000;
+
+                const [lon1, lat1] = coord1;
+                const [lon2, lat2] = coord2;
+
+                const dLat = toRad(lat2 - lat1);
+                const dLon = toRad(lon2 - lon1);
+
+                const a = Math.sin(dLat / 2) ** 2 + 
+                          Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * 
+                          Math.sin(dLon / 2) ** 2;
+
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                return R * c;
+            }
+
+            updateProgressEstimates() {
+                if (!this.currentRoute || !this.currentPosition) return;
+                
+                let remainingDistance = 0;
+                for (let i = this.currentWaypointIndex; i < this.currentRoute.path.length - 1; i++) {
+                    const current = this.currentRoute.path[i];
+                    const next = this.currentRoute.path[i + 1];
+                    remainingDistance += this.calculateDistance(current.coordinates, next.coordinates);
+                }
+                
+                const currentWaypoint = this.currentRoute.path[this.currentWaypointIndex];
+                remainingDistance += this.calculateDistance(
+                    this.currentPosition.coords,
+                    currentWaypoint.coordinates
+                );
+                
+                this.estimatedTimeRemaining = Math.ceil(remainingDistance / 1.4);
+            }
+
+            handleNavigationError(error) {
+                console.error('🚨 Navigation Error:', error.message);
+                
+                if (this.onNavigationError) {
+                    this.onNavigationError(error);
+                }
+            }
+
+            stopNavigation() {
+                console.log('⏹️ Stopping navigation...');
+                
+                this.isNavigating = false;
+                
+                if (this.watchId) {
+                    navigator.geolocation.clearWatch(this.watchId);
+                    this.watchId = null;
+                }
+                
+                if (this.navigationInterval) {
+                    clearInterval(this.navigationInterval);
+                    this.navigationInterval = null;
+                }
+                
+                this.currentRoute = null;
+                this.currentPosition = null;
+                this.currentWaypointIndex = 0;
+            }
+
+            completeNavigation() {
+                console.log('✅ Navigation completed!');
+                this.reachDestination();
+            }
+        }
+
+        // On-Site Navigation System
+        class CemeteryOnSiteNavigation {
+            constructor(container, options = {}) {
+                this.container = container;
+                this.options = {
+                    arrivalThreshold: 3,
+                    waypointThreshold: 8,
+                    offRouteThreshold: 15,
+                    enableHighAccuracy: true,
+                    maximumAge: 500,
+                    timeout: 10000,
+                    minProgressDistance: 1,
+                    stationaryTimeout: 45000,
+                    positionUpdateInterval: 500,
+                    navigationUpdateInterval: 250,
+                    ...options
+                };
+                
+                this.pathfinder = null;
+                this.gpsNavigation = null;
+                this.isInitialized = false;
+                
+                this.statusDisplay = null;
+                this.instructionDisplay = null;
+                this.progressDisplay = null;
+                this.debugDisplay = null;
+                
+                this.setupUI();
+            }
+
+            async initialize() {
+                try {
+                    console.log('🏗️ Initializing cemetery on-site navigation...');
+                    
+                    this.pathfinder = new CemeteryPathfinder();
+                    await this.pathfinder.loadPathwayData();
+                    
+                    this.gpsNavigation = new RealTimeGPSNavigation(this.options);
+                    this.setupEventHandlers();
+                    
+                    this.isInitialized = true;
+                    this.updateStatus('System ready for on-site testing', 'success');
+                    
+                    // Enable destination buttons
+                    this.container.querySelectorAll('.destination').forEach(btn => {
+                        btn.disabled = false;
+                    });
+                    
+                    console.log('✅ On-site navigation system initialized');
+                    return true;
+                    
+                } catch (error) {
+                    console.error('❌ Initialization failed:', error);
+                    this.updateStatus(`Initialization failed: ${error.message}`, 'error');
+                    return false;
+                }
+            }
+
+            async startNavigationTo(destinationCoords, destinationName = 'Destination') {
+                try {
+                    if (!this.isInitialized) {
+                        throw new Error('System not initialized. Click "Initialize System" first.');
+                    }
+
+                    this.updateStatus('Getting your current location...', 'info');
+                    
+                    const currentPosition = await this.getCurrentPositionAccurate();
+                    const currentCoords = [currentPosition.longitude, currentPosition.latitude];
+                    
+                    this.updateStatus(`Starting navigation to ${destinationName}...`, 'info');
+                    
+                    const result = await this.gpsNavigation.startRealTimeNavigation(
+                        currentCoords,
+                        destinationCoords,
+                        this.pathfinder
+                    );
+                    
+                    if (!result.success) {
+                        throw new Error(result.error);
+                    }
+                    
+                    this.updateStatus(`Navigation active to ${destinationName}`, 'navigating');
+                    this.updateInstruction('Follow the path ahead. GPS navigation is now active.');
+                    
+                    console.log('🧭 On-site navigation started successfully');
+                    
+                    return result;
+                    
+                } catch (error) {
+                    console.error('❌ Navigation start failed:', error);
+                    this.updateStatus(`Navigation failed: ${error.message}`, 'error');
+                    throw error;
+                }
+            }
+
+            getCurrentPositionAccurate() {
+                return new Promise((resolve, reject) => {
+                    if (!navigator.geolocation) {
+                        reject(new Error('GPS not supported on this device'));
+                        return;
+                    }
+                    
+                    const options = {
+                        enableHighAccuracy: true,
+                        maximumAge: 0,
+                        timeout: 15000
+                    };
+                    
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            resolve({
+                                latitude: position.coords.latitude,
+                                longitude: position.coords.longitude,
+                                accuracy: position.coords.accuracy,
+                                timestamp: Date.now()
+                            });
+                        },
+                        (error) => {
+                            const errorMessages = {
+                                1: 'GPS permission denied. Please enable location access.',
+                                2: 'GPS position unavailable. Are you outdoors with clear sky view?',
+                                3: 'GPS timeout. Please try again.'
+                            };
+                            reject(new Error(errorMessages[error.code] || 'GPS error'));
+                        },
+                        options
+                    );
+                });
+            }
+
+            setupEventHandlers() {
+                this.gpsNavigation.onLocationUpdate = (position) => {
+                    this.handleLocationUpdate(position);
+                };
+                
+                this.gpsNavigation.onNavigationUpdate = (update) => {
+                    this.handleNavigationUpdate(update);
+                };
+                
+                this.gpsNavigation.onWaypointReached = (data) => {
+                    this.handleWaypointReached(data);
+                };
+                
+                this.gpsNavigation.onDestinationReached = (data) => {
+                    this.handleDestinationReached(data);
+                };
+                
+                this.gpsNavigation.onNavigationError = (error) => {
+                    this.handleNavigationError(error);
+                };
+            }
+
+            handleLocationUpdate(position) {
+                // GPS accuracy feedback handled in GPS navigation class
+            }
+
+            handleNavigationUpdate(update) {
+                this.updateInstruction(update.instruction);
+                
+                const progressText = `
+                    Distance to waypoint: ${update.distanceToWaypoint.toFixed(1)}m
+                    Distance to destination: ${update.distanceToDestination.toFixed(1)}m
+                    Progress: ${update.waypointIndex + 1}/${update.totalWaypoints} waypoints
+                    ETA: ${Math.floor(update.estimatedTimeRemaining / 60)}:${(update.estimatedTimeRemaining % 60).toString().padStart(2, '0')}
+                `;
+                this.updateProgress(progressText);
+            }
+
+            handleWaypointReached(data) {
+                console.log(`🎯 Waypoint reached: ${data.waypoint.name}`);
+                this.updateStatus(`Reached: ${data.waypoint.name || data.waypoint.nodeId}`, 'waypoint');
+                
+                if (navigator.vibrate) {
+                    navigator.vibrate(200);
+                }
+            }
+
+            // FIXED: Proper destination reached handling
+            handleDestinationReached(data) {
+                console.log('🏁 Destination reached!');
+                
+                this.updateStatus('✅ You have arrived at your destination!', 'arrived');
+                this.updateInstruction('Navigation complete. You have successfully reached your destination.');
+                
+                const completionText = `
+                    🎉 Navigation Complete!
+                    
+                    Total distance traveled: ${data.totalDistanceTraveled.toFixed(1)}m
+                    Total time: ${Math.floor(data.totalTime / 60000)}:${((data.totalTime % 60000) / 1000).toFixed(0).padStart(2, '0')}
+                    
+                    Navigation has ended.
+                `;
+                this.updateProgress(completionText);
+                
+                if (navigator.vibrate) {
+                    navigator.vibrate([200, 100, 200, 100, 200]);
+                }
+                
+                this.showRestartOption();
+            }
+
+            handleNavigationError(error) {
+                console.error('🚨 Navigation error:', error);
+                this.updateStatus(`Error: ${error.message}`, 'error');
+            }
+
+            stopNavigation() {
+                if (this.gpsNavigation) {
+                    this.gpsNavigation.stopNavigation();
+                }
+                
+                this.updateStatus('Navigation stopped', 'stopped');
+                this.updateInstruction('Navigation has been stopped. Select a destination to begin a new route.');
+                this.updateProgress('');
+            }
+
+            setupUI() {
+                this.container.innerHTML = `
+                    <div class="cemetery-navigation-ui">
+                        <div class="nav-header">
+                            <h2>🗺️ Cemetery Navigation</h2>
+                            <div class="nav-status" id="nav-status">Ready to initialize...</div>
+                        </div>
+                        
+                        <div class="nav-instruction" id="nav-instruction">
+                            Welcome to on-site cemetery navigation. Click "Initialize System" to begin.
+                        </div>
+                        
+                        <div class="nav-progress" id="nav-progress"></div>
+                        
+                        <div class="nav-controls">
+                            <button id="init-btn" class="nav-btn primary">Initialize System</button>
+                            <button id="stop-btn" class="nav-btn secondary" disabled>Stop Navigation</button>
+                        </div>
+                        
+                        <div class="nav-quick-destinations">
+                            <h3>🎯 Test Destinations</h3>
+                            <button class="nav-btn destination" data-coords="[120.9767, 14.4727]" disabled>Main Entrance</button>
+                            <button class="nav-btn destination" data-coords="[120.9753, 14.47096]" disabled>Phase 3 Block 5-Adult</button>
+                            <button class="nav-btn destination" data-coords="[120.9758, 14.47119]" disabled>P2-14-Bone</button>
+                            <button class="nav-btn destination" data-coords="[120.9767, 14.47266]" disabled>Cemetery Office</button>
+                        </div>
+                    </div>
+                `;
+                
+                this.statusDisplay = this.container.querySelector('#nav-status');
+                this.instructionDisplay = this.container.querySelector('#nav-instruction');
+                this.progressDisplay = this.container.querySelector('#nav-progress');
+                
+                this.setupUIEventListeners();
+                this.addStyles();
+            }
+
+            setupUIEventListeners() {
+                this.container.querySelector('#init-btn').addEventListener('click', async () => {
+                    const btn = this.container.querySelector('#init-btn');
+                    btn.disabled = true;
+                    btn.textContent = 'Initializing...';
+                    
+                    const success = await this.initialize();
+                    
+                    if (success) {
+                        btn.textContent = 'System Ready ✓';
+                        btn.style.background = '#28a745';
+                        this.container.querySelector('#stop-btn').disabled = false;
+                    } else {
+                        btn.disabled = false;
+                        btn.textContent = 'Initialize System';
+                    }
+                });
+                
+                this.container.querySelector('#stop-btn').addEventListener('click', () => {
+                    this.stopNavigation();
+                });
+                
+                this.container.querySelectorAll('.destination').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        if (btn.disabled) return;
+                        
+                        const coords = JSON.parse(btn.dataset.coords);
+                        const name = btn.textContent;
+                        
+                        btn.disabled = true;
+                        btn.textContent = 'Starting...';
+                        
+                        try {
+                            await this.startNavigationTo(coords, name);
+                        } catch (error) {
+                            btn.disabled = false;
+                            btn.textContent = name;
+                        }
+                    });
+                });
+            }
+
+            updateStatus(message, type = 'info') {
+                if (this.statusDisplay) {
+                    this.statusDisplay.textContent = message;
+                    this.statusDisplay.className = `nav-status ${type}`;
+                }
+            }
+
+            updateInstruction(message) {
+                if (this.instructionDisplay) {
+                    this.instructionDisplay.textContent = message;
+                }
+            }
+
+            updateProgress(message) {
+                if (this.progressDisplay) {
+                    this.progressDisplay.innerHTML = message.replace(/\n/g, '<br>');
+                }
+            }
+
+            showRestartOption() {
+                // Re-enable destination buttons
+                this.container.querySelectorAll('.destination').forEach(btn => {
+                    btn.disabled = false;
+                    btn.textContent = btn.dataset.originalText || btn.textContent;
+                });
+            }
+
+            addStyles() {
+                // Styles already included in main CSS
+            }
+        }
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', () => {
+            const container = document.getElementById('navigation-container');
+            const navigation = new CemeteryOnSiteNavigation(container, {
+                // Field testing optimized settings
+                arrivalThreshold: 3,
+                waypointThreshold: 8,
+                offRouteThreshold: 15,
+                positionUpdateInterval: 500,
+                navigationUpdateInterval: 250
+            });
+            
+            // Emergency stop functionality
+            document.getElementById('emergency-stop').addEventListener('click', () => {
+                navigation.stopNavigation();
+                alert('🛑 Navigation stopped immediately!');
+            });
+            
+            // Store original button text
+            container.querySelectorAll('.destination').forEach(btn => {
+                btn.dataset.originalText = btn.textContent;
+            });
+            
+            console.log('🚀 Cemetery On-Site Navigation loaded and ready!');
+        });
+    </script>
+</body>
+</html>

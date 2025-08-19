@@ -50,9 +50,325 @@
   let directDistanceToDestination = $state(0);
   let showExitPopup = $state(false);
   
+  // Real-time GPS navigation state
+  let realTimeNavigation = $state(null);
+  let isRealTimeNavigating = $state(false);
+  let navigationStatus = $state('');
+  let navigationInstruction = $state('');
+  let arrivalThreshold = $state(5); // meters
+  let waypointThreshold = $state(10); // meters
+  
   let matchProperty = $derived(() => 
     matchName ? propertyFeatures.find((p) => p.name === matchName) : null
   );
+
+  // Real-time GPS Navigation Class
+  class RealTimeGPSNavigation {
+    constructor(options = {}) {
+      this.options = {
+        arrivalThreshold: options.arrivalThreshold || 5,
+        waypointThreshold: options.waypointThreshold || 10,
+        offRouteThreshold: options.offRouteThreshold || 20,
+        enableHighAccuracy: true,
+        maximumAge: 1000,
+        timeout: 5000,
+        positionUpdateInterval: 1000,
+        navigationUpdateInterval: 500,
+        minProgressDistance: 2,
+        ...options
+      };
+      
+      this.isNavigating = false;
+      this.currentRoute = null;
+      this.currentPosition = null;
+      this.currentWaypointIndex = 0;
+      this.watchId = null;
+      this.navigationInterval = null;
+      this.totalDistanceTraveled = 0;
+      this.estimatedTimeRemaining = 0;
+      
+      // Callbacks
+      this.onLocationUpdate = null;
+      this.onNavigationUpdate = null;
+      this.onWaypointReached = null;
+      this.onDestinationReached = null;
+      this.onOffRoute = null;
+      this.onNavigationError = null;
+    }
+
+    async startRealTimeNavigation(startCoords, endCoords, routeCoordinates) {
+      try {
+        console.log('🚀 Starting real-time GPS navigation...');
+        
+        if (!navigator.geolocation) {
+          throw new Error('GPS/Geolocation not supported on this device');
+        }
+
+        this.currentRoute = {
+          coordinates: routeCoordinates,
+          startCoords,
+          endCoords,
+          startTime: Date.now()
+        };
+        
+        this.currentWaypointIndex = 0;
+        this.isNavigating = true;
+        this.totalDistanceTraveled = 0;
+        
+        console.log(`✅ Route set: ${routeCoordinates.length} waypoints`);
+        
+        this.startGPSTracking();
+        this.startNavigationLoop();
+        
+        return {
+          success: true,
+          route: this.currentRoute,
+          message: 'Real-time navigation started'
+        };
+        
+      } catch (error) {
+        console.error('❌ Navigation start failed:', error);
+        this.handleNavigationError(error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+    }
+
+    startGPSTracking() {
+      const options = {
+        enableHighAccuracy: this.options.enableHighAccuracy,
+        maximumAge: this.options.maximumAge,
+        timeout: this.options.timeout
+      };
+
+      this.watchId = navigator.geolocation.watchPosition(
+        (position) => this.handleLocationUpdate(position),
+        (error) => this.handleLocationError(error),
+        options
+      );
+      
+      console.log('📍 GPS tracking started');
+    }
+
+    handleLocationUpdate(position) {
+      const newPosition = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        timestamp: Date.now(),
+        coords: [position.coords.longitude, position.coords.latitude]
+      };
+
+      if (this.currentPosition) {
+        const distanceMoved = this.calculateDistance(
+          this.currentPosition.coords,
+          newPosition.coords
+        );
+        
+        if (distanceMoved >= this.options.minProgressDistance) {
+          this.totalDistanceTraveled += distanceMoved;
+        }
+      }
+
+      this.currentPosition = newPosition;
+      
+      if (this.onLocationUpdate) {
+        this.onLocationUpdate(newPosition);
+      }
+    }
+
+    handleLocationError(error) {
+      console.error('📍 GPS Error:', error.message);
+      
+      const errorMessages = {
+        1: 'GPS permission denied',
+        2: 'GPS position unavailable', 
+        3: 'GPS timeout'
+      };
+      
+      this.handleNavigationError(new Error(errorMessages[error.code] || 'GPS error'));
+    }
+
+    startNavigationLoop() {
+      this.navigationInterval = setInterval(() => {
+        if (!this.isNavigating || !this.currentPosition) {
+          return;
+        }
+
+        this.updateNavigation();
+        
+      }, this.options.navigationUpdateInterval);
+    }
+
+    updateNavigation() {
+      if (!this.currentRoute || !this.currentPosition) return;
+
+      const routeCoords = this.currentRoute.coordinates;
+      const currentWaypoint = routeCoords[this.currentWaypointIndex];
+      const nextWaypoint = routeCoords[this.currentWaypointIndex + 1];
+      
+      if (!currentWaypoint) {
+        this.completeNavigation();
+        return;
+      }
+
+      const distanceToWaypoint = this.calculateDistance(
+        this.currentPosition.coords,
+        currentWaypoint
+      );
+
+      const finalDestination = routeCoords[routeCoords.length - 1];
+      const distanceToDestination = this.calculateDistance(
+        this.currentPosition.coords,
+        finalDestination
+      );
+
+      // FIXED: Check if reached final destination (proper threshold check)
+      if (distanceToDestination <= this.options.arrivalThreshold) {
+        this.reachDestination();
+        return;
+      }
+
+      // Check if reached current waypoint
+      if (distanceToWaypoint <= this.options.waypointThreshold) {
+        this.reachWaypoint();
+        return;
+      }
+
+      this.updateProgressEstimates();
+
+      const navigationUpdate = {
+        currentPosition: this.currentPosition,
+        currentWaypoint,
+        nextWaypoint,
+        distanceToWaypoint: distanceToWaypoint,
+        distanceToDestination: distanceToDestination,
+        totalDistanceTraveled: this.totalDistanceTraveled,
+        estimatedTimeRemaining: this.estimatedTimeRemaining,
+        waypointIndex: this.currentWaypointIndex,
+        totalWaypoints: routeCoords.length,
+        instruction: this.generateInstruction(currentWaypoint, nextWaypoint, distanceToWaypoint)
+      };
+
+      if (this.onNavigationUpdate) {
+        this.onNavigationUpdate(navigationUpdate);
+      }
+    }
+
+    reachWaypoint() {
+      if (this.currentWaypointIndex < this.currentRoute.coordinates.length - 1) {
+        this.currentWaypointIndex++;
+        
+        const waypoint = this.currentRoute.coordinates[this.currentWaypointIndex];
+        console.log(`🎯 Reached waypoint ${this.currentWaypointIndex}`);
+        
+        if (this.onWaypointReached) {
+          this.onWaypointReached({
+            waypointIndex: this.currentWaypointIndex,
+            totalWaypoints: this.currentRoute.coordinates.length
+          });
+        }
+      }
+    }
+
+    reachDestination() {
+      console.log('🏁 Destination reached!');
+      
+      this.isNavigating = false;
+      
+      if (this.onDestinationReached) {
+        this.onDestinationReached({
+          totalDistanceTraveled: this.totalDistanceTraveled,
+          totalTime: Date.now() - this.currentRoute.startTime
+        });
+      }
+      
+      this.stopNavigation();
+    }
+
+    generateInstruction(currentWaypoint, nextWaypoint, distanceToWaypoint) {
+      if (!nextWaypoint) {
+        return `Continue to destination`;
+      }
+      
+      if (distanceToWaypoint < 20) {
+        return `In ${Math.round(distanceToWaypoint)}m, continue ahead`;
+      } else {
+        return `Continue ${Math.round(distanceToWaypoint)}m ahead`;
+      }
+    }
+
+    calculateDistance(coord1, coord2) {
+      const toRad = (deg) => deg * (Math.PI / 180);
+      const R = 6371000;
+
+      const [lon1, lat1] = coord1;
+      const [lon2, lat2] = coord2;
+
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+
+      const a = Math.sin(dLat / 2) ** 2 + 
+                Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * 
+                Math.sin(dLon / 2) ** 2;
+
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    updateProgressEstimates() {
+      if (!this.currentRoute || !this.currentPosition) return;
+      
+      let remainingDistance = 0;
+      const coords = this.currentRoute.coordinates;
+      
+      for (let i = this.currentWaypointIndex; i < coords.length - 1; i++) {
+        remainingDistance += this.calculateDistance(coords[i], coords[i + 1]);
+      }
+      
+      remainingDistance += this.calculateDistance(
+        this.currentPosition.coords,
+        coords[this.currentWaypointIndex]
+      );
+      
+      this.estimatedTimeRemaining = Math.ceil(remainingDistance / 1.4);
+    }
+
+    handleNavigationError(error) {
+      console.error('🚨 Navigation Error:', error.message);
+      
+      if (this.onNavigationError) {
+        this.onNavigationError(error);
+      }
+    }
+
+    stopNavigation() {
+      console.log('⏹️ Stopping navigation...');
+      
+      this.isNavigating = false;
+      
+      if (this.watchId) {
+        navigator.geolocation.clearWatch(this.watchId);
+        this.watchId = null;
+      }
+      
+      if (this.navigationInterval) {
+        clearInterval(this.navigationInterval);
+        this.navigationInterval = null;
+      }
+      
+      this.currentRoute = null;
+      this.currentPosition = null;
+      this.currentWaypointIndex = 0;
+    }
+
+    completeNavigation() {
+      console.log('✅ Navigation completed!');
+      this.reachDestination();
+    }
+  }
 
   // Mapbox access token
   mapboxgl.accessToken = 'pk.eyJ1IjoiaW50ZWxsaXRlY2giLCJhIjoiY21jZTZzMm1xMHNmczJqcHMxOWtmaTd4aiJ9.rKhf7nuky9mqxxFAAIJlrQ';
@@ -873,7 +1189,9 @@ async function startNavigationToProperty(property) {
 
     currentRoute = { coordinates: routeCoords, distance: totalDistance, steps: navigationSteps };
     displayRoute();
-    startNavigationUpdates(); // ⚠ make sure this has distance-based arrival check
+    
+    // ✅ START REAL-TIME GPS NAVIGATION instead of old system
+    await startRealTimeGPSNavigation(userCoords, targetCoords, routeCoords);
 
   } catch (error) {
     console.error('Navigation error:', error);
@@ -881,6 +1199,100 @@ async function startNavigationToProperty(property) {
     stopNavigation();
   } finally {
     isLoading = false;
+  }
+}
+
+// ✅ NEW: Start real-time GPS navigation
+async function startRealTimeGPSNavigation(startCoords, endCoords, routeCoordinates) {
+  try {
+    console.log('🚀 Initializing real-time GPS navigation...');
+    
+    // Initialize real-time navigation system
+    realTimeNavigation = new RealTimeGPSNavigation({
+      arrivalThreshold: arrivalThreshold,
+      waypointThreshold: waypointThreshold,
+      offRouteThreshold: 20,
+      positionUpdateInterval: 1000,
+      navigationUpdateInterval: 500
+    });
+    
+    // Set up event handlers
+    realTimeNavigation.onLocationUpdate = (position) => {
+      console.log(`📍 GPS: ${position.accuracy.toFixed(1)}m accuracy`);
+      
+      // Update user marker
+      if (userMarker) {
+        userMarker.setLngLat([position.longitude, position.latitude]);
+      }
+      
+      // Update user location state
+      userLocation = { lng: position.longitude, lat: position.latitude };
+      
+      // Update status based on GPS accuracy
+      if (position.accuracy > 10) {
+        navigationStatus = 'GPS accuracy low. Move to open area.';
+      } else {
+        navigationStatus = 'GPS active';
+      }
+    };
+    
+    realTimeNavigation.onNavigationUpdate = (update) => {
+      navigationInstruction = update.instruction;
+      distanceToDestination = update.distanceToDestination;
+      
+      // Update UI with real-time navigation info
+      navigationStatus = `Distance: ${update.distanceToDestination.toFixed(1)}m | ETA: ${Math.floor(update.estimatedTimeRemaining / 60)}:${(update.estimatedTimeRemaining % 60).toString().padStart(2, '0')}`;
+      
+      console.log(`🧭 Navigation: ${update.instruction}`);
+      console.log(`📏 Distance to destination: ${update.distanceToDestination.toFixed(1)}m`);
+    };
+    
+    realTimeNavigation.onWaypointReached = (data) => {
+      console.log(`🎯 Waypoint ${data.waypointIndex}/${data.totalWaypoints} reached`);
+      showSuccess(`Waypoint reached: ${data.waypointIndex}/${data.totalWaypoints}`);
+    };
+    
+    realTimeNavigation.onDestinationReached = (data) => {
+      console.log('🏁 Destination reached!');
+      navigationStatus = 'Arrived at destination!';
+      navigationInstruction = 'You have successfully reached your destination.';
+      
+      // Show completion message
+      showSuccess(`Navigation complete! Total distance: ${data.totalDistanceTraveled.toFixed(1)}m`);
+      
+      // Complete navigation properly - NO MORE "ALREADY ARRIVED" ISSUE
+      completeNavigation();
+    };
+    
+    realTimeNavigation.onNavigationError = (error) => {
+      console.error('🚨 Real-time navigation error:', error);
+      showError(`Navigation error: ${error.message}`);
+    };
+    
+    // Start the real-time navigation
+    const result = await realTimeNavigation.startRealTimeNavigation(
+      startCoords,
+      endCoords,
+      routeCoordinates
+    );
+    
+    if (result.success) {
+      isRealTimeNavigating = true;
+      navigationStatus = 'Real-time navigation active';
+      navigationInstruction = 'Follow the route. GPS navigation is active.';
+      showSuccess('Real-time GPS navigation started!');
+      console.log('✅ Real-time GPS navigation successfully started');
+    } else {
+      throw new Error(result.error);
+    }
+    
+  } catch (error) {
+    console.error('❌ Failed to start real-time navigation:', error);
+    showError(`Failed to start GPS navigation: ${error.message}`);
+    
+    // Fallback to old navigation system
+    console.log('🔄 Falling back to old navigation system');
+    startNavigationUpdates();
   }
 }
 
@@ -1436,7 +1848,16 @@ function findNearestRouteIndex(targetPoint, routeCoordinates) {
   }
 
   function stopNavigation() {
+    console.log('⏹️ Stopping navigation...');
+    
+    // Stop real-time GPS navigation
+    if (realTimeNavigation) {
+      realTimeNavigation.stopNavigation();
+      realTimeNavigation = null;
+    }
+    
     isNavigating = false;
+    isRealTimeNavigating = false;
     
     // Clear the navigation interval
     if (directionUpdateInterval) {
@@ -1468,6 +1889,8 @@ function findNearestRouteIndex(targetPoint, routeCoordinates) {
     externalRoute = null;
     currentStep = '';
     distanceToDestination = 0;
+    navigationStatus = '';
+    navigationInstruction = '';
   }
 
   
@@ -1701,14 +2124,17 @@ function handleSearchInput(event) {
 
         <div class="bg-gray-50 p-3 rounded-lg">
           <h3 class="font-semibold text-gray-700 mb-1">Navigation Status</h3>
-          <p class="font-medium {isNavigating ? 'text-green-600' : 'text-red-600'}">
-            {isNavigating ? 'Active' : 'Inactive'}
+          <p class="font-medium {isRealTimeNavigating ? 'text-green-600' : isNavigating ? 'text-blue-600' : 'text-red-600'}">
+            {isRealTimeNavigating ? '🚀 Real-Time GPS Active' : isNavigating ? '📍 Basic Navigation' : 'Inactive'}
           </p>
+          {#if navigationStatus}
+            <p class="text-sm text-gray-600 mt-1">{navigationStatus}</p>
+          {/if}
         </div>
 
         <div class="bg-gray-50 p-3 rounded-lg">
-          <h3 class="font-semibold text-gray-700 mb-1">Current Step</h3>
-          <p class="text-gray-600">{currentStep || 'Not navigating'}</p>
+          <h3 class="font-semibold text-gray-700 mb-1">Navigation Instruction</h3>
+          <p class="text-gray-600">{navigationInstruction || currentStep || 'Not navigating'}</p>
         </div>
 
         <div class="bg-gray-50 p-3 rounded-lg">
@@ -1716,6 +2142,44 @@ function handleSearchInput(event) {
           <p class="text-gray-600">
             {distanceToDestination ? `${distanceToDestination.toFixed(0)} meters` : 'Not navigating'}
           </p>
+        </div>
+
+        <!-- Real-Time GPS Navigation Settings -->
+        <div class="bg-blue-50 p-3 rounded-lg border border-blue-200">
+          <h3 class="font-semibold text-blue-700 mb-2">🚀 Real-Time GPS Settings</h3>
+          
+          <div class="space-y-2">
+            <div>
+              <label class="block text-sm text-gray-700 mb-1">Arrival Threshold (meters)</label>
+              <input 
+                type="number" 
+                bind:value={arrivalThreshold} 
+                min="1" 
+                max="20" 
+                class="w-full px-2 py-1 text-sm border rounded"
+                title="Distance to consider arrived at destination"
+              />
+              <p class="text-xs text-gray-500">How close to be considered "arrived" (1-20m)</p>
+            </div>
+            
+            <div>
+              <label class="block text-sm text-gray-700 mb-1">Waypoint Threshold (meters)</label>
+              <input 
+                type="number" 
+                bind:value={waypointThreshold} 
+                min="5" 
+                max="50" 
+                class="w-full px-2 py-1 text-sm border rounded"
+                title="Distance to consider waypoint reached"
+              />
+              <p class="text-xs text-gray-500">Distance to progress to next waypoint (5-50m)</p>
+            </div>
+          </div>
+          
+          <div class="mt-2 text-xs text-blue-600">
+            📱 Mobile WebView: Real-time GPS navigation active<br>
+            🔧 Optimized for on-site cemetery testing
+          </div>
         </div>
       </div>
     </section>
