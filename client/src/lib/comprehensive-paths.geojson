@@ -1,0 +1,698 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "main_entrance",
+        "name": "Main Entrance", 
+        "type": "entrance",
+        "connects_to": ["central_hub", "eastern_path_start", "western_path_start"]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9767, 14.4727]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "central_hub",
+        "name": "Central Hub", 
+        "type": "junction",
+        "connects_to": ["main_entrance", "north_corridor", "south_corridor", "east_corridor", "west_corridor"]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9763, 14.47240]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "main_central_path",
+        "name": "Main Central Pathway", 
+        "type": "primary_path",
+        "connects_to": ["main_entrance", "central_hub"],
+        "width": "wide",
+        "surface": "concrete",
+        "weight": 1.0
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [120.9767, 14.4727],
+          [120.9765, 14.47255],
+          [120.9763, 14.47240]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "north_corridor",
+        "name": "North Corridor", 
+        "type": "primary_path",
+        "connects_to": ["central_hub", "north_junction_1", "north_junction_2"],
+        "width": "wide",
+        "surface": "concrete",
+        "weight": 1.0
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [120.9763, 14.47240],
+          [120.9762, 14.47250],
+          [120.9761, 14.47260],
+          [120.9760, 14.47270]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "south_corridor",
+        "name": "South Corridor", 
+        "type": "primary_path",
+        "connects_to": ["central_hub", "south_junction_1", "south_junction_2"],
+        "width": "wide",
+        "surface": "concrete",
+        "weight": 1.0
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [120.9763, 14.47240],
+          [120.9762, 14.47220],
+          [120.9761, 14.47200],
+          [120.9760, 14.47180]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "east_corridor",
+        "name": "East Corridor", 
+        "type": "primary_path",
+        "connects_to": ["central_hub", "east_junction_1", "east_junction_2"],
+        "width": "medium",
+        "surface": "asphalt",
+        "weight": 1.2
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [120.9763, 14.47240],
+          [120.9765, 14.47235],
+          [120.9767, 14.47230],
+          [120.9769, 14.47225]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "west_corridor",
+        "name": "West Corridor", 
+        "type": "primary_path",
+        "connects_to": ["central_hub", "west_junction_1", "west_junction_2"],
+        "width": "medium",
+        "surface": "gravel",
+        "weight": 1.5
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [120.9763, 14.47240],
+          [120.9760, 14.47235],
+          [120.9757, 14.47230],
+          [120.9754, 14.47225]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "north_junction_1",
+        "name": "North Junction 1", 
+        "type": "junction",
+        "connects_to": ["north_corridor", "phase2_access_path", "phase3_access_path"]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9761, 14.47260]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "north_junction_2",
+        "name": "North Junction 2", 
+        "type": "junction",
+        "connects_to": ["north_corridor", "office_access_path", "block_6_access"]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9760, 14.47270]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "south_junction_1",
+        "name": "South Junction 1", 
+        "type": "junction",
+        "connects_to": ["south_corridor", "bone_section_path", "adult_section_path"]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9761, 14.47200]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "south_junction_2",
+        "name": "South Junction 2", 
+        "type": "junction",
+        "connects_to": ["south_corridor", "private_section_path", "child_section_path"]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9760, 14.47180]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "east_junction_1",
+        "name": "East Junction 1", 
+        "type": "junction",
+        "connects_to": ["east_corridor", "eastern_blocks_path"]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9767, 14.47230]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "west_junction_1",
+        "name": "West Junction 1", 
+        "type": "junction",
+        "connects_to": ["west_corridor", "western_blocks_path"]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9757, 14.47230]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "phase2_access_path",
+        "name": "Phase 2 Access Path", 
+        "type": "secondary_path",
+        "connects_to": ["north_junction_1", "phase2_hub"],
+        "width": "medium",
+        "surface": "concrete",
+        "weight": 1.3
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [120.9761, 14.47260],
+          [120.9760, 14.47250],
+          [120.9759, 14.47200],
+          [120.9758, 14.47180]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "phase3_access_path",
+        "name": "Phase 3 Access Path", 
+        "type": "secondary_path",
+        "connects_to": ["north_junction_1", "phase3_hub"],
+        "width": "medium",
+        "surface": "gravel",
+        "weight": 1.4
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [120.9761, 14.47260],
+          [120.9758, 14.47240],
+          [120.9756, 14.47200],
+          [120.9754, 14.47160]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "bone_section_path",
+        "name": "Bone Section Path", 
+        "type": "secondary_path",
+        "connects_to": ["south_junction_1", "bone_hub"],
+        "width": "narrow",
+        "surface": "gravel",
+        "weight": 1.6
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [120.9761, 14.47200],
+          [120.9759, 14.47190],
+          [120.9758, 14.47170],
+          [120.9757, 14.47150]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "child_section_path",
+        "name": "Child Section Path", 
+        "type": "secondary_path",
+        "connects_to": ["south_junction_2", "child_hub"],
+        "width": "narrow",
+        "surface": "concrete",
+        "weight": 1.4
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [120.9760, 14.47180],
+          [120.9762, 14.47170],
+          [120.9764, 14.47160],
+          [120.9765, 14.47150]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "phase2_hub",
+        "name": "Phase 2 Hub", 
+        "type": "section_hub",
+        "connects_to": ["phase2_access_path", "block_11_access", "block_12_access", "block_13_access", "block_14_access", "block_15_access"]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9758, 14.47180]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "phase3_hub",
+        "name": "Phase 3 Hub", 
+        "type": "section_hub",
+        "connects_to": ["phase3_access_path", "block_2_access", "block_3_access", "block_4_access", "block_5_access"]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9754, 14.47160]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "bone_hub",
+        "name": "Bone Section Hub", 
+        "type": "section_hub",
+        "connects_to": ["bone_section_path", "bone_b2_access", "bone_p1_access", "bone_cb_access"]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9757, 14.47150]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "child_hub",
+        "name": "Child Section Hub", 
+        "type": "section_hub",
+        "connects_to": ["child_section_path", "child_c3_access", "child_c5c6_access"]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9765, 14.47150]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "block_2_access",
+        "name": "Phase 3 Block 5-Adult Access", 
+        "type": "block_access",
+        "connects_to": ["phase3_hub"],
+        "serves_block": "Phase 3 Block 5-Adult",
+        "block_id": "2",
+        "block_coordinates": [120.9753, 14.47096]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9753, 14.47096]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "block_3_access",
+        "name": "P2-14-Bone Access", 
+        "type": "block_access",
+        "connects_to": ["phase3_hub"],
+        "serves_block": "P2-14-Bone",
+        "block_id": "3",
+        "block_coordinates": [120.9758, 14.47119]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9758, 14.47119]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "block_4_access",
+        "name": "Block 4 Access", 
+        "type": "block_access",
+        "connects_to": ["phase3_hub"],
+        "serves_block": "4",
+        "block_id": "4",
+        "block_coordinates": [120.9757, 14.47205]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9757, 14.47205]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "block_5_access",
+        "name": "Block 5 Access", 
+        "type": "block_access",
+        "connects_to": ["phase3_hub"],
+        "serves_block": "5",
+        "block_id": "5",
+        "block_coordinates": [120.9763, 14.4724]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9763, 14.4724]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "block_6_access",
+        "name": "Block 6 Access", 
+        "type": "block_access",
+        "connects_to": ["north_junction_2"],
+        "serves_block": "6",
+        "block_id": "6",
+        "block_coordinates": [120.9767, 14.47274]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9767, 14.47274]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "office_access",
+        "name": "Office Access", 
+        "type": "block_access",
+        "connects_to": ["north_junction_2"],
+        "serves_block": "Office",
+        "block_id": "7",
+        "block_coordinates": [120.9767, 14.47266]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9767, 14.47266]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "block_11_access",
+        "name": "Phase 2 Block 15-Adult Access", 
+        "type": "block_access",
+        "connects_to": ["phase2_hub"],
+        "serves_block": "Phase 2 Block 15-Adult",
+        "block_id": "11",
+        "block_coordinates": [120.976, 14.47176]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.976, 14.47176]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "block_12_access",
+        "name": "Phase 2 Block 13-Bone Access", 
+        "type": "block_access",
+        "connects_to": ["phase2_hub"],
+        "serves_block": "Phase 2 Block 13-Bone",
+        "block_id": "12",
+        "block_coordinates": [120.976, 14.47174]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.976, 14.47174]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "block_13_access",
+        "name": "P2-12-Bone Access", 
+        "type": "block_access",
+        "connects_to": ["phase2_hub"],
+        "serves_block": "P2-12-Bone",
+        "block_id": "13",
+        "block_coordinates": [120.9759, 14.47144]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9759, 14.47144]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "block_14_access",
+        "name": "Phase 2 Block 11-Bone Access", 
+        "type": "block_access",
+        "connects_to": ["phase2_hub"],
+        "serves_block": "Phase 2 Block 11-Bone",
+        "block_id": "14",
+        "block_coordinates": [120.9759, 14.47177]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9759, 14.47177]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "block_cb_access",
+        "name": "P2-CB-Bone Access", 
+        "type": "block_access",
+        "connects_to": ["bone_hub"],
+        "serves_block": "P2-CB-Bone",
+        "block_id": "8",
+        "block_coordinates": [120.9759, 14.47155]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9759, 14.47155]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "block_16_access",
+        "name": "p-3 Block-2-Bone Access", 
+        "type": "block_access",
+        "connects_to": ["bone_hub"],
+        "serves_block": "p-3 Block-2-Bone",
+        "block_id": "16",
+        "block_coordinates": [120.9754, 14.47147]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9754, 14.47147]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "block_17_access",
+        "name": "p-3 Block-3-Bone Access", 
+        "type": "block_access",
+        "connects_to": ["bone_hub"],
+        "serves_block": "p-3 Block-3-Bone",
+        "block_id": "17",
+        "block_coordinates": [120.9756, 14.47168]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9756, 14.47168]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "block_18_access",
+        "name": "p-3 Block-4-Bone Access", 
+        "type": "block_access",
+        "connects_to": ["bone_hub"],
+        "serves_block": "p-3 Block-4-Bone",
+        "block_id": "18",
+        "block_coordinates": [120.9757, 14.47192]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9757, 14.47192]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "block_19_access",
+        "name": "p-3 Block-5-Bone Access", 
+        "type": "block_access",
+        "connects_to": ["bone_hub"],
+        "serves_block": "p-3 Block-5-Bone",
+        "block_id": "19",
+        "block_coordinates": [120.9758, 14.47215]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9758, 14.47215]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "block_20_access",
+        "name": "p-1 Block-1-Bone Access", 
+        "type": "block_access",
+        "connects_to": ["bone_hub"],
+        "serves_block": "p-1 Block-1-Bone",
+        "block_id": "20",
+        "block_coordinates": [120.976, 14.47237]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.976, 14.47237]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "child_c5c6_access",
+        "name": "C5andC6-Child Access", 
+        "type": "block_access",
+        "connects_to": ["child_hub"],
+        "serves_block": "C5andC6-Child",
+        "block_id": "29",
+        "block_coordinates": [120.9765, 14.47158]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9765, 14.47158]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "child_c3_access",
+        "name": "C3-Child Access", 
+        "type": "block_access",
+        "connects_to": ["child_hub"],
+        "serves_block": "C3-Child",
+        "block_id": "31",
+        "block_coordinates": [120.9765, 14.47255]
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [120.9765, 14.47255]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "cross_path_1",
+        "name": "Cross Path 1", 
+        "type": "tertiary_path",
+        "connects_to": ["phase2_hub", "bone_hub"],
+        "width": "narrow",
+        "surface": "dirt",
+        "weight": 2.0
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [120.9758, 14.47180],
+          [120.9757, 14.47165],
+          [120.9757, 14.47150]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "cross_path_2",
+        "name": "Cross Path 2", 
+        "type": "tertiary_path",
+        "connects_to": ["bone_hub", "child_hub"],
+        "width": "narrow",
+        "surface": "gravel",
+        "weight": 1.8
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [120.9757, 14.47150],
+          [120.9761, 14.47150],
+          [120.9765, 14.47150]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { 
+        "id": "service_path_1",
+        "name": "Service Path 1", 
+        "type": "service_path",
+        "connects_to": ["main_entrance", "phase3_hub"],
+        "width": "wide",
+        "surface": "concrete",
+        "weight": 1.1,
+        "access_type": "emergency"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [120.9767, 14.4727],
+          [120.9760, 14.47200],
+          [120.9754, 14.47160]
+        ]
+      }
+    }
+  ]
+}
