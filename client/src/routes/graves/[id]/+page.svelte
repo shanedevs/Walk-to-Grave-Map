@@ -609,6 +609,72 @@ map.once('idle', async () => {
     url: 'mapbox://intellitech.cme0cp8bs0ato1plqyzz7xcp8-1904w'
   });
 
+    // 🔹 Add GeoJSON source for comprehensive pathways
+  map.addSource('cemetery-pathways', {
+    type: 'geojson',
+    data: '/src/lib/comprehensive-paths.geojson'
+  });
+
+  // 🔹 Add pathway lines layer
+  map.addLayer({
+    id: 'pathway-lines',
+    type: 'line',
+    source: 'cemetery-pathways',
+    filter: ['==', ['geometry-type'], 'LineString'],
+    paint: {
+      'line-color': [
+        'case',
+        ['==', ['get', 'type'], 'primary_path'], '#2563eb',
+        ['==', ['get', 'type'], 'secondary_path'], '#3b82f6',
+        ['==', ['get', 'type'], 'tertiary_path'], '#6366f1',
+        ['==', ['get', 'type'], 'service_path'], '#f59e0b',
+        '#6b7280'
+      ],
+      'line-width': [
+        'case',
+        ['==', ['get', 'width'], 'wide'], 4,
+        ['==', ['get', 'width'], 'medium'], 3,
+        ['==', ['get', 'width'], 'narrow'], 2,
+        2
+      ],
+      'line-opacity': 0.7
+    }
+  });
+
+  // 🔹 Add pathway junctions layer
+  map.addLayer({
+    id: 'pathway-junctions',
+    type: 'circle',
+    source: 'cemetery-pathways',
+    filter: ['all',
+      ['==', ['geometry-type'], 'Point'],
+      ['==', ['get', 'type'], 'junction']
+    ],
+    paint: {
+      'circle-color': '#dc2626',
+      'circle-radius': 6,
+      'circle-stroke-color': '#ffffff',
+      'circle-stroke-width': 2
+    }
+  });
+
+  // 🔹 Add block access points layer
+  map.addLayer({
+    id: 'pathway-access-points',
+    type: 'circle',
+    source: 'cemetery-pathways',
+    filter: ['all',
+      ['==', ['geometry-type'], 'Point'],
+      ['==', ['get', 'type'], 'block_access']
+    ],
+    paint: {
+      'circle-color': '#16a34a',
+      'circle-radius': 4,
+      'circle-stroke-color': '#ffffff',
+      'circle-stroke-width': 1
+    }
+  });
+
   // 🔹 Add subdivision block layers
   map.addLayer({
     id: 'cemetery-paths',
