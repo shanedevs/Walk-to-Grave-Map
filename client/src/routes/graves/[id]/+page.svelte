@@ -571,8 +571,11 @@ function tryPreselectBlock() {
       center: [120.9763, 14.4725],
       zoom: 20,
       attributionControl: true,
-      logoPosition: 'bottom-right'
+      logoPosition: 'bottom-right',
+      interactive: false
     });
+    // optionally keep programmatic controls (they will render but user can't interact)
+    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
     
     let userId = localStorage.getItem('userId');
     if (!userId) {
@@ -2170,6 +2173,10 @@ function handleSearchInput(event) {
     <section class="relative bg-white border-x border-gray-200 my-6">
       <div bind:this={mapContainer} class="map-fullscreen"></div>
 
+      <!-- transparent blocker overlay to ensure touches are captured and not passed to map -->
+<div class="map-blocker" 
+     on:click|preventDefault={() => {/* optional: show message or do nothing */}}></div>
+
       {#if !map}
         <div class="absolute inset-0 bg-gray-100 flex items-center justify-center">
           <div class="text-center">
@@ -2305,6 +2312,14 @@ function handleSearchInput(event) {
     width: 100%;
     height: 100vh;
   }
+  .map-blocker {
+  position: fixed;
+  inset: 0;
+  z-index: 60;            /* above the map visuals */
+  background: transparent;
+  touch-action: none;     /* prevent touch gestures */
+  cursor: default;
+}
 
   /* Hide Mapbox UI controls if added by Mapbox */
   :global(.mapboxgl-ctrl), 
