@@ -49,6 +49,7 @@
   let progressPercentage = $state(0);
   let directDistanceToDestination = $state(0);
   let showExitPopup = $state(false);
+  let mapClicksEnabled = false;
   
   // Real-time GPS navigation state
   let realTimeNavigation = $state(null);
@@ -819,6 +820,17 @@ async function loadLineStringFeatures() {
       goto(`/graves/${name}`);
 
   });
+
+  map.on('load', () => {
+      try {
+        const canvas = map.getCanvas();
+        if (canvas) {
+          canvas.style.pointerEvents = 'none';
+        }
+      } catch (err) {
+        console.warn('Could not disable map canvas pointer events', err);
+      }
+    });
 
  map.once('idle', async () => {
     await zoomOutToLocatorBounds();
@@ -2311,14 +2323,20 @@ function handleSearchInput(event) {
     inset: 0;
     width: 100%;
     height: 100vh;
+    z-index: 50; /* keep map under the blocker */
   }
   .map-blocker {
   position: fixed;
   inset: 0;
-  z-index: 60;            /* above the map visuals */
+  z-index: 9999;            /* above the map visuals */
   background: transparent;
-  touch-action: none;     /* prevent touch gestures */
+  pointer-events: all;     /* accept and stop mouse/touch events */
+  touch-action: none;      /* prevent gestures */
   cursor: default;
+}
+.map-fullscreen :global(canvas),
+.map-fullscreen :global(.mapboxgl-canvas) {
+  pointer-events: none;
 }
 
   /* Hide Mapbox UI controls if added by Mapbox */
