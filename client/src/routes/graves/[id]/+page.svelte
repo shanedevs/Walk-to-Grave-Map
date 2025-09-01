@@ -801,7 +801,17 @@ async function loadLineStringFeatures() {
   // 🔹 Handle map click on locator block
   map.on('click', 'locator-blocks', (e) => {
     const feature = e.features?.[0];
-    const name = feature?.properties?.name;
+    if (!feature) return;
+
+    const props = feature.properties || {};
+    // support both boolean true or string 'true' from GeoJSON properties
+    const isClickable = props.clickable === true || String(props.clickable).toLowerCase() === 'true';
+    if (!isClickable) {
+      // ignore non-clickable locator points
+      console.debug('Locator click ignored (not clickable):', props.name);
+      return;
+    }
+    const name = props.name;
     if (!name) return;
 
     const property = {
@@ -817,8 +827,7 @@ async function loadLineStringFeatures() {
 
     startNavigationToProperty(property);
     showSuccess(`Selected locator: ${name}`);
-      goto(`/graves/${name}`);
-
+    goto(`/graves/${name}`);
   });
 
   map.on('load', () => {
@@ -837,15 +846,21 @@ async function loadLineStringFeatures() {
     await loadLocatorBlockFeatures();
     await loadFeaturesFromMap()
   });
-
-  // 🔹 Cursor styles for locator blocks
-  map.on('mouseenter', 'locator-blocks', () => {
-    map.getCanvas().style.cursor = 'pointer';
+map.on('mousemove', 'locator-blocks', (e) => {
+    const feature = e.features?.[0];
+    if (!feature) {
+      map.getCanvas().style.cursor = '';
+      return;
+    }
+    const props = feature.properties || {};
+    const isClickable = props.clickable === true || String(props.clickable).toLowerCase() === 'true';
+    map.getCanvas().style.cursor = isClickable ? 'pointer' : '';
   });
-
+  
   map.on('mouseleave', 'locator-blocks', () => {
     map.getCanvas().style.cursor = '';
   });
+
 // Count locator blocks once map is idle
     map.once('idle', () => {
       try {
