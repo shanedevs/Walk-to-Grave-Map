@@ -797,37 +797,10 @@ async function loadLineStringFeatures() {
   }
 }
 
-
-  // 🔹 Handle map click on locator block
   map.on('click', 'locator-blocks', (e) => {
-    const feature = e.features?.[0];
-    if (!feature) return;
-
-    const props = feature.properties || {};
-    // support both boolean true or string 'true' from GeoJSON properties
-    const isClickable = props.clickable === true || String(props.clickable).toLowerCase() === 'true';
-    if (!isClickable) {
-      // ignore non-clickable locator points
-      console.debug('Locator click ignored (not clickable):', props.name);
-      return;
-    }
-    const name = props.name;
-    if (!name) return;
-
-    const property = {
-      id: feature.id,
-      name,
-      lng: e.lngLat.lng,
-      lat: e.lngLat.lat,
-      feature
-    };
-
-    selectedProperty = property;
-    matchName = name;
-
-    startNavigationToProperty(property);
-    showSuccess(`Selected locator: ${name}`);
-    goto(`/graves/${name}`);
+    // intentionally ignore clicks on locator points to prevent in-map navigation
+    console.debug('Locator click ignored: point clicks are disabled.');
+    // If you later want to enable per-feature clicks, check feature.properties.clickable === true here
   });
 
   map.on('load', () => {
@@ -856,7 +829,7 @@ map.on('mousemove', 'locator-blocks', (e) => {
     const isClickable = props.clickable === true || String(props.clickable).toLowerCase() === 'true';
     map.getCanvas().style.cursor = isClickable ? 'pointer' : '';
   });
-  
+
   map.on('mouseleave', 'locator-blocks', () => {
     map.getCanvas().style.cursor = '';
   });
