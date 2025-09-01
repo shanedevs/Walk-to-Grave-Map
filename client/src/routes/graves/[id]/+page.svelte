@@ -724,56 +724,39 @@ map.once('idle', async () => {
     }
   });
 
-  map.addLayer({
-    id: 'locator-blocks-labels',
-    type: 'symbol',
-    source: 'locator-blocks-source',
-    'source-layer': 'locator-blocks',
-    layout: {
-      'text-field': ['get', 'name'],
-      'text-size': 12,
-      'text-offset': [0, 2],
-      'text-anchor': 'top'
-    },
-    paint: {
-      'text-color': '#ef4444',
-      'text-halo-color': '#ffffff',
-      'text-halo-width': 2,
-      'text-opacity': 0.0
-    }
-  });
+  // --- NEW: ensure locator points are non-interactive ---
+  function disableLocatorInteractivity() {
+    try {
+      // remove any click/mouse handlers bound to locator layers
+      map.off('click', 'locator-blocks');
+      map.off('click', 'locator-blocks-labels');
+      map.off('click', 'block-markers');
+      map.off('mousemove', 'locator-blocks');
+      map.off('mouseenter', 'locator-blocks');
+      map.off('mouseleave', 'locator-blocks');
 
-  map.addLayer({
-    id: 'block-markers',
-    type: 'circle',
-    source: 'locator-blocks-source',
-    'source-layer': 'locator-blocks',
-    paint: {
-      'circle-radius': 4,
-      'circle-color': '#008000',
-      'circle-opacity': 0.5
-    }
-  });
+      // defensive: set cursor default and prevent canvas pointer events
+      const canvas = map.getCanvas && map.getCanvas();
+      if (canvas) {
+        canvas.style.cursor = 'default';
+        canvas.style.pointerEvents = 'none'; // map events disabled at canvas level
+      }
 
-  map.addLayer({
-    id: 'block-labels',
-    type: 'symbol',
-    source: 'locator-blocks-source',
-    'source-layer': 'locator-blocks',
-    layout: {
-      'text-field': ['get', 'name'],
-      'text-size': 11,
-      'text-offset': [0, 1.5],
-      'text-anchor': 'top',
-      'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold']
-    },
-    paint: {
-      'text-color': '#374151',
-      'text-halo-color': '#ffffff',
-      'text-halo-width': 1
+      console.debug('Locator interactivity disabled');
+    } catch (err) {
+      console.warn('disableLocatorInteractivity failed', err);
     }
-  });
+  }
 
+  // Call immediately after layers are added
+  disableLocatorInteractivity();
+
+  // Also call again once map is idle (covers dynamic listeners)
+  map.once('idle', () => {
+    disableLocatorInteractivity();
+  });
+  // --- END NEW ---
+  
   // 🔹 Load cemetery paths for route logic
   await loadLineStringFeatures();
 
@@ -890,8 +873,6 @@ map.once('idle', () => {
     // attemptAutoNavigate will load features and auto-navigate if selectedBlock exists
     attemptAutoNavigate();
   });
-
-  // ...existing code...
 
   // Helper: robust auto-navigation sequence
   async function attemptAutoNavigate() {
